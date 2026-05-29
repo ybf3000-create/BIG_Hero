@@ -74,11 +74,11 @@ func _check_command() -> void:
 		"close_create":
 			_close_window("CreateDialog")
 		"click_delete":
-			_exec_on("select_slot", "_show_delete_dialog", [cmd.get("slot", 0), {}])
+			_exec_on("select_slot", "_show_delete_dialog", [cmd.get("slot", 0), _get_slot_info(cmd.get("slot", 0))])
 		"hold_confirm":
-			_simulate_hold("DeletePanel/ConfirmBtn", cmd.get("seconds", 3.0))
+			_simulate_hold("DeleteOverlay/DeletePanel/ConfirmBtn", cmd.get("seconds", 3.0))
 		"click_cancel":
-			_press_button_by_text("DeletePanel", "取 消")
+			_press_button_by_text("DeleteOverlay/DeletePanel", "取 消")
 		"click_overlay":
 			_exec_on_node("DeleteOverlay", "queue_free", [])
 		"click_dice":
@@ -107,6 +107,12 @@ func _clear_cmd_file() -> void:
 
 
 ## ============ Helpers ============
+
+func _get_slot_info(slot: int) -> Dictionary:
+	var sm := get_node_or_null("/root/SaveManager")
+	if sm:
+		return sm.get_slot_info(slot)
+	return {}
 
 func _get_root_control() -> Control:
 	for child in get_tree().root.get_children():
