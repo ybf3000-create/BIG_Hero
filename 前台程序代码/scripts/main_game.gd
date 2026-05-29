@@ -55,6 +55,18 @@ const VISIBLE_BEFORE: int = 2
 const VISIBLE_AFTER: int  = 4
 
 const GridTileCls = preload("res://scripts/grid_tile.gd")
+const DiceRollerCls = preload("res://scripts/dice_roller.gd")
+const GridExecutorCls = preload("res://scripts/grid_executor.gd")
+
+# 骰子 & 执行器
+var dice: DiceRoller
+var executor: GridExecutor
+
+# 移动动画
+var _moving: bool = false
+var _move_step: int = 0
+var _move_total: int = 0
+var _move_timer: float = 0.0
 
 # 矩形格子尺寸
 const TILE_W: float = 150.0
@@ -68,6 +80,10 @@ const TILE_COUNT: int = 7
 func _ready() -> void:
 	anchor_right  = 1.0
 	anchor_bottom = 1.0
+
+	# 初始化子系统
+	dice = DiceRollerCls.new()
+	executor = GridExecutorCls.new()
 
 	# 从选择界面传来的存档数据
 	if has_meta("save_slot") and has_meta("save_data"):
@@ -521,10 +537,13 @@ func _build_save_data() -> Dictionary:
 
 
 ## ============================================================
-## 掷骰逻辑
+## 掷骰逻辑 — 使用 DiceRoller + 步进移动 + GridExecutor
 ## ============================================================
 func _on_dice_roll() -> void:
-	last_dice_roll = randi() % 6 + 1
+	if _moving:
+		return  # 移动中不能再次掷骰
+
+	last_dice_roll = dice.roll()
 	last_dice_suit = SUITS[randi() % 4]
 
 	_refresh_dice_display()
@@ -545,24 +564,55 @@ func _on_dice_roll() -> void:
 	if hist_lbl:
 		hist_lbl.text = hist_text
 
-	var prev_idx := player_grid_index
-	player_grid_index = (player_grid_index + last_dice_roll) % map_total_grids
+	# 启动步进移动动画
+	_move_step = 0
+	_move_total = last_dice_roll
+	_moving = true
 
-	var reward_lbl: Label = $TopBar/DiceRewardLabel as Label
-	if prev_idx + last_dice_roll >= map_total_grids:
-		player_gold += 50
-		if reward_lbl:
-			reward_lbl.text = "🎲 掷骰奖励: 过起点 +50金!"
+
+## 每帧更新移动动画
+func _process(delta: float) -> void:
+	if not _moving:
+		return
+
+	_move_timer += delta
+	if _move_timer >= 0.35:  # 每步 0.35 秒
+		_move_timer = 0.0
+		_move_step += 1
+
+		# 移动一步
+		var prev_idx := player_grid_index
+		player_grid_index = (player_grid_index + 1) % map_total_grids
+
+		# 检查是否经过起点
+		if prev_idx > player_grid_index:
+			player_gold += 50
+			var rl: Label = $TopBar/DiceRewardLabel as Label
+			if rl:
+				rl.text = "🎲 掷骰奖励: 过起点 +50金!"
+			_refresh_top_bar()
+
+		# 刷新格子显示
+		_refresh_grid_display()
+
+		# 检查是否到达目标
+		if _move_step >= _move_total:
+			_moving = false
+			_on_move_complete()
+
+
+func _on_move_complete() -> void:
+	# 使用 GridExecutor 触发当前位置的格子效果
+	var gtype: int = map_grids[player_grid_index % map_total_grids]
+	var ctx := { "player_level": player_level, "player_gold": player_gold }
+	var result: Dictionary = executor.execute(gtype, ctx)
+	print("[Grid] 格子类型=", gtype, " (", GridExecutor.TYPE_NAME.get(gtype, "?"), ") → ", result["event"])
 
 	_check_poker_hand()
-
 	_refresh_top_bar()
-	_refresh_grid_display()
-
-	# 自动保存
 	_auto_save()
 
-	# 自动挂机：继续下一次掷骰
+	# 自动挂机继续
 	if auto_play_enabled:
 		_start_auto_timer()
 
