@@ -1,7 +1,25 @@
 extends Node
 ## ============================================================
 ## DebugCommander - 调试命令接收器 (Autoload)
-## 读取 user://debug_cmd.txt → 解析 JSON → 执行 UI 操作
+## 原理: AI(WorkBuddy) → godot-mcp → user://debug_cmd.txt → 本脚本
+## 无需窗口坐标, 通过文本 JSON 命令模拟 UI 操作
+##
+## 格式: {"action": "命令名", "slot": 0, "text": "...", "seconds": 3}
+##
+## 命令速查:
+##   选档:    click_slot {slot}          confirm_create
+##   创建:    create_char {slot}         input_name {text}     cancel_create
+##   删除:    click_delete {slot}        hold_confirm {sec}    click_cancel
+##   主界面:  click_dice, click_bag, click_skill, click_log, click_home, toggle_auto
+##
+## 完整测试流程:
+##   debug_cmd {action:"click_slot", slot:0}
+##   debug_cmd {action:"input_name", text:"测试"}
+##   debug_cmd {action:"confirm_create"}
+##   debug_cmd {action:"click_dice"}
+##   debug_cmd {action:"click_home"}
+##
+## 依赖: project.godot 中注册 Autoload, godot-mcp debug_cmd 工具
 ## ============================================================
 
 var _timer: Timer
