@@ -400,12 +400,12 @@ func _build_bottom_bar() -> void:
 	dice_btn.add_theme_font_size_override("font_size", 22)
 	bar.add_child(dice_btn)
 
-	# -- 功能按钮 --
+	# -- 功能按钮（4个均匀分布: 1280总宽 - 4×180 = 560 / 5间隔 = 112） --
 	var btn_data := [
-		{ "name": "BagBtn",       "text": "🎒 背包",  "x":  80 },
-		{ "name": "SkillBtn",     "text": "⚡ 技能",  "x": 350 },
-		{ "name": "LogBtn",       "text": "📋 日志",  "x": 930 },
-		{ "name": "SettingsBtn",  "text": "⚙️ 设置",  "x": 1100 },
+		{ "name": "BagBtn",       "text": "🎒 背包",  "x": 112 },
+		{ "name": "SkillBtn",     "text": "⚡ 技能",  "x": 404 },
+		{ "name": "LogBtn",       "text": "📋 日志",  "x": 696 },
+		{ "name": "SettingsBtn",  "text": "⚙️ 设置",  "x": 988 },
 	]
 	for b in btn_data:
 		var btn := Button.new()
