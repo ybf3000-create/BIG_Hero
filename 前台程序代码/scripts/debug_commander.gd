@@ -179,11 +179,11 @@ func _set_line_edit(rel_path: String, text: String) -> void:
 			le.text_changed.emit(text)
 
 
-func _close_window(name: String) -> void:
+func _close_window(node_name: String) -> void:
 	var ctrl := _get_root_control()
 	if not ctrl:
 		return
-	var w := ctrl.get_node_or_null(name)
+	var w := ctrl.get_node_or_null(node_name)
 	if w:
 		w.queue_free()
 
