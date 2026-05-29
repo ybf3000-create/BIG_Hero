@@ -613,7 +613,8 @@ func _refresh_grid_display() -> void:
 
 		var info := _get_grid_info(grid_idx)
 		var is_current := (i == 3)
-		var fill: Color = info["clr"] if is_current else info["clr"].darkened(0.55)
+		var clr: Color = info["clr"]
+		var fill: Color = clr if is_current else clr.darkened(0.55)
 		var border: Color = Color(1.0, 1.0, 0.2, 0.9) if is_current else Color(0.5, 0.5, 0.6, 0.5)
 		tile.setup(info["icon"], info["name"] + "#" + str(grid_idx), fill, border)
 
