@@ -68,9 +68,8 @@ func _check_command() -> void:
 		"input_name":
 			_set_line_edit("CreateDialog/NameInput", cmd.get("text", ""))
 		"confirm_create":
-			_press_button("CreateDialog/CreateBtn")
+			_press_button("CreateDialog", "CreateBtn")
 		"cancel_create":
-			_press_button("CreateDialog/CreateBtn")  # actually cancel
 			_close_window("CreateDialog")
 		"close_create":
 			_close_window("CreateDialog")
@@ -144,10 +143,10 @@ func _press_button(parent_name: String, btn_name: String) -> void:
 	if not ctrl:
 		return
 	var parent := ctrl.get_node_or_null(parent_name)
-	if not parent:
-		parent = ctrl.get_node_or_null(btn_name)  # try direct
-	if parent is Button:
-		_press(parent)
+	if parent:
+		var btn := parent.get_node_or_null(btn_name)
+		if btn is Button:
+			_press(btn)
 
 
 func _press_button_by_text(parent_name: String, text: String) -> void:
