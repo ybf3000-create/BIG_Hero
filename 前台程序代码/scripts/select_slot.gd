@@ -406,8 +406,8 @@ func _show_delete_dialog(slot: int, info: Dictionary) -> void:
 			overlay.queue_free()
 			_refresh_slots()
 	)
-	tick.start()
 	dlg.add_child(tick)
+	tick.start()
 
 	confirm_btn.button_down.connect(func():
 		if _s["deleted"]: return
@@ -421,10 +421,19 @@ func _show_delete_dialog(slot: int, info: Dictionary) -> void:
 		progress.value = 0.0
 	)
 
+	# 对话框自身拦截点击（防冒泡）
+	dlg.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and ev.pressed:
+			overlay.accept_event()  # no-op, just consume to prevent propagation
+	)
+
 	# 点击遮罩空白处关闭
 	overlay.gui_input.connect(func(ev: InputEvent):
 		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
-			overlay.queue_free()
+			var mouse_pos := overlay.get_local_mouse_position()
+			var dlg_rect := Rect2(dlg.position, dlg.size)
+			if not dlg_rect.has_point(mouse_pos):
+				overlay.queue_free()
 	)
 
 

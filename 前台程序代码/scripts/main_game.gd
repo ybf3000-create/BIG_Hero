@@ -489,7 +489,9 @@ func _load_from_save_data(data: Dictionary) -> void:
 	last_dice_history.clear()
 	for item in data.get("dice_history", []):
 		last_dice_history.append(int(item))
-	poker_records = data.get("poker_records", []) as Array[Dictionary]
+	poker_records.clear()
+	for item in data.get("poker_records", []):
+		poker_records.append(item as Dictionary)
 	_refresh_poker_slots()
 
 
