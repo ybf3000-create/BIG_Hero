@@ -68,12 +68,13 @@ var _move_step: int = 0
 var _move_total: int = 0
 var _move_timer: float = 0.0
 
-# 矩形格子尺寸
-const TILE_W: float = 150.0
-const TILE_H: float = 100.0
-const TILE_GAP: float = 10.0   # 左右间隔
+# 透视梯形格子尺寸（底宽 × 高）
+const TILE_W: float = 170.0       # 底部宽度
+const TILE_H: float = 125.0       # 高度
 const TILE_COUNT: int = 7
-# TILE_Y 在 _build_map_area 中动态计算（MapArea 高度 - 格子高度）/ 2
+# 透视缩放：[最远, 远, 近, 当前, 近, 远, 最远]
+const PERSPECTIVE_SCALES: Array[float] = [0.60, 0.75, 0.88, 1.0, 0.88, 0.75, 0.60]
+# TILE_Y 在 _build_map_area 中动态计算
 
 
 ## ============ _ready ============
@@ -336,21 +337,27 @@ func _build_map_area() -> void:
 	bg_hint.position = Vector2(540, 120)
 	area.add_child(bg_hint)
 
-	# -- 矩形地图格子（底边水平，左右相接） --
-	var total_span := TILE_COUNT * TILE_W + (TILE_COUNT - 1) * TILE_GAP
+	# -- 透视梯形地图格子（底平，左右相接，透视缩放） --
+	var total_span := TILE_COUNT * TILE_W  # 底边相连无间隙
 	var start_x := (1280.0 - total_span) / 2.0
 	var tile_y := (area.size.y - TILE_H) / 2.0
 	var slot_names := ["PrevGrid2", "PrevGrid1", "CurrentGrid", "NextGrid1", "NextGrid2", "NextGrid3", "NextGrid4"]
 
 	for i in range(TILE_COUNT):
-		var tile = GridTileCls.new()
+		var tile: Control = GridTileCls.new()
 		tile.name = slot_names[i]
-		tile.position = Vector2(start_x + i * (TILE_W + TILE_GAP), tile_y)
-		tile.size = Vector2(TILE_W, TILE_H)
-		tile.set_label_positions(0, 0)  # 内部自适应
+		var s: float = PERSPECTIVE_SCALES[i]
+		var tw: float = TILE_W * s
+		var th: float = TILE_H * s
+		# 缩放后保持底部中心对齐
+		var offset_x: float = (TILE_W - tw) / 2.0
+		var offset_y: float = TILE_H - th
+		tile.position = Vector2(start_x + i * TILE_W + offset_x, tile_y + offset_y)
+		tile.size = Vector2(tw, th)
+		tile.set_label_positions(0, 0)
 		area.add_child(tile)
 
-	# -- 主角图像（放在格子上方，最后添加=最上层） --
+	# -- 主角图像（居中当前格，色键透明背景） --
 	var grid_tile_y := (area.size.y - TILE_H) / 2.0
 	var hero_tex := load("res://assets/主角.bmp")
 	if hero_tex:
@@ -359,7 +366,15 @@ func _build_map_area() -> void:
 		hero.texture = hero_tex
 		hero.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		hero.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		hero.size = Vector2(120, 120)
+		hero.size = Vector2(130, 130)
+
+		# 色键透明背景
+		var shader_mat := ShaderMaterial.new()
+		var chroma_shader := load("res://assets/hero_chroma.gdshader")
+		if chroma_shader:
+			shader_mat.shader = chroma_shader
+			hero.material = shader_mat
+
 		area.add_child(hero)
 		_position_hero_on_tile(hero, 3, area)  # 初始在当前格
 	else:
@@ -367,7 +382,9 @@ func _build_map_area() -> void:
 		fallback.name = "HeroFallback"
 		fallback.text = "🚶"
 		fallback.add_theme_font_size_override("font_size", 64)
-		fallback.position = Vector2(608, grid_tile_y - 80)
+		# 居中当前格
+		var fcx: float = start_x + 3 * TILE_W + TILE_W / 2.0
+		fallback.position = Vector2(fcx - 32, grid_tile_y - 40)
 		area.add_child(fallback)
 
 	# -- 位置计数 --
@@ -399,11 +416,13 @@ func _position_hero_on_tile(hero: TextureRect, tile_index: int, p_area: Control 
 	var area: Control = p_area if p_area else get_node_or_null("MapArea")
 	if not area:
 		return
-	var total_span := TILE_COUNT * TILE_W + (TILE_COUNT - 1) * TILE_GAP
+	var total_span := TILE_COUNT * TILE_W
 	var start_x := (1280.0 - total_span) / 2.0
-	var tile_center_x := start_x + tile_index * (TILE_W + TILE_GAP) + TILE_W / 2.0
 	var tile_y := (area.size.y - TILE_H) / 2.0
-	hero.position = Vector2(tile_center_x - hero.size.x / 2.0, tile_y - hero.size.y + 10)
+	# 当前格（tile_index=3）为 100% 缩放
+	var center_x: float = start_x + tile_index * TILE_W + TILE_W / 2.0
+	var center_y: float = tile_y + TILE_H / 2.0
+	hero.position = Vector2(center_x - hero.size.x / 2.0, center_y - hero.size.y + 10)
 
 
 ## ============================================================

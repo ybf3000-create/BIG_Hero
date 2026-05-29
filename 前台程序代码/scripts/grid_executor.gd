@@ -107,7 +107,7 @@ func _exec_start(_ctx: Dictionary) -> Dictionary:
 
 
 func _exec_battle(_ctx: Dictionary) -> Dictionary:
-	return { "event": "battle", "data": { "message": "遭遇敌人！","level": ctx.get("player_level", 1) } }
+	return { "event": "battle", "data": { "message": "遭遇敌人！","level": _ctx.get("player_level", 1) } }
 
 
 func _exec_rest(_ctx: Dictionary) -> Dictionary:
@@ -128,7 +128,7 @@ func _exec_chance(_ctx: Dictionary) -> Dictionary:
 	return { "event": "chance", "data": { "message": "随机事件：" + pick } }
 
 
-func _exec_boss(ctx: Dictionary, level: int) -> Dictionary:
+func _exec_boss(_ctx: Dictionary, level: int) -> Dictionary:
 	return { "event": "boss", "data": { "message": "Boss Lv.%d 出现！" % level, "boss_level": level } }
 
 
