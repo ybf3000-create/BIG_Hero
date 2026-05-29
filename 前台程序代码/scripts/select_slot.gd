@@ -98,7 +98,7 @@ func _build_ui() -> void:
 
 	# 底部提示
 	var hint := Label.new()
-	hint.text = "点击空槽位创建角色 · 点击已创建角色切换 · 长按3秒删除"
+	hint.text = "点击空槽位创建角色 · 点击已创建角色进入游戏"
 	hint.add_theme_font_size_override("font_size", 13)
 	hint.add_theme_color_override("font_color", Color(0.3, 0.35, 0.4))
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -164,15 +164,10 @@ func _on_slot_clicked(slot: int) -> void:
 		_show_create_dialog(slot)
 		return
 
-	# 如果点击的是非激活槽位 → 直接切换
-	if _active_slot != slot:
-		_active_slot = slot
-		_refresh_slots()
-		return
-
-	# 点击已激活槽位 → 开始游戏
+	# 点击已创建槽位 → 直接进入游戏
 	var data: Dictionary = _sm().load_game(slot)
 	if not data.is_empty():
+		_active_slot = slot
 		_start_game(slot, data)
 
 
