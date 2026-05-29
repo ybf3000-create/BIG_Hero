@@ -102,29 +102,29 @@ func execute(grid_type: int, context: Dictionary) -> Dictionary:
 
 ## ============ 各类型执行逻辑 ============
 
-func _exec_start(ctx: Dictionary) -> Dictionary:
+func _exec_start(_ctx: Dictionary) -> Dictionary:
 	return { "event": "start_pass", "data": { "message": "经过起点！获得奖励！" } }
 
 
-func _exec_battle(ctx: Dictionary) -> Dictionary:
+func _exec_battle(_ctx: Dictionary) -> Dictionary:
 	return { "event": "battle", "data": { "message": "遭遇敌人！","level": ctx.get("player_level", 1) } }
 
 
-func _exec_rest(ctx: Dictionary) -> Dictionary:
+func _exec_rest(_ctx: Dictionary) -> Dictionary:
 	return { "event": "rest", "data": { "message": "休息一下，恢复生命值","heal_percent": 0.2 } }
 
 
-func _exec_treasure(ctx: Dictionary) -> Dictionary:
+func _exec_treasure(_ctx: Dictionary) -> Dictionary:
 	return { "event": "treasure", "data": { "message": "发现宝箱！" } }
 
 
-func _exec_shop(ctx: Dictionary) -> Dictionary:
+func _exec_shop(_ctx: Dictionary) -> Dictionary:
 	return { "event": "shop", "data": { "message": "遇到商店！" } }
 
 
-func _exec_chance(ctx: Dictionary) -> Dictionary:
-	var outcomes := ["获得金币", "获得经验", "触发战斗", "获得装备"]
-	var pick := outcomes[randi() % outcomes.size()]
+func _exec_chance(_ctx: Dictionary) -> Dictionary:
+	var outcomes: Array[String] = ["获得金币", "获得经验", "触发战斗", "获得装备"]
+	var pick: String = outcomes[randi() % outcomes.size()]
 	return { "event": "chance", "data": { "message": "随机事件：" + pick } }
 
 
@@ -132,25 +132,25 @@ func _exec_boss(ctx: Dictionary, level: int) -> Dictionary:
 	return { "event": "boss", "data": { "message": "Boss Lv.%d 出现！" % level, "boss_level": level } }
 
 
-func _exec_holiday(ctx: Dictionary) -> Dictionary:
+func _exec_holiday(_ctx: Dictionary) -> Dictionary:
 	return { "event": "holiday", "data": { "message": "度假中，跳过下一回合" } }
 
 
-func _exec_lottery(ctx: Dictionary) -> Dictionary:
+func _exec_lottery(_ctx: Dictionary) -> Dictionary:
 	return { "event": "lottery", "data": { "message": "进入彩票抽取！" } }
 
 
-func _exec_storm(ctx: Dictionary) -> Dictionary:
+func _exec_storm(_ctx: Dictionary) -> Dictionary:
 	return { "event": "storm", "data": { "message": "遭遇风暴！失去生命值" } }
 
 
-func _exec_revive(ctx: Dictionary) -> Dictionary:
+func _exec_revive(_ctx: Dictionary) -> Dictionary:
 	return { "event": "revive", "data": { "message": "获得一枚复活币" } }
 
 
-func _exec_empty(ctx: Dictionary) -> Dictionary:
+func _exec_empty(_ctx: Dictionary) -> Dictionary:
 	return { "event": "empty", "data": { "message": "准备集合" } }
 
 
-func _exec_empty_2(ctx: Dictionary) -> Dictionary:
+func _exec_empty_2(_ctx: Dictionary) -> Dictionary:
 	return { "event": "empty_2", "data": { "message": "获得额外金币！", "bonus_gold": 50 } }

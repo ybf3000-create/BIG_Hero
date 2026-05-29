@@ -59,8 +59,8 @@ const DiceRollerCls = preload("res://scripts/dice_roller.gd")
 const GridExecutorCls = preload("res://scripts/grid_executor.gd")
 
 # 骰子 & 执行器
-var dice: DiceRoller
-var executor: GridExecutor
+var dice: RefCounted
+var executor: RefCounted
 
 # 移动动画
 var _moving: bool = false
@@ -361,7 +361,7 @@ func _build_map_area() -> void:
 		hero.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		hero.size = Vector2(120, 120)
 		area.add_child(hero)
-		_position_hero_on_tile(hero, 3)  # 初始在当前格
+		_position_hero_on_tile(hero, 3, area)  # 初始在当前格
 	else:
 		var fallback := Label.new()
 		fallback.name = "HeroFallback"
@@ -395,11 +395,13 @@ func _build_map_area() -> void:
 
 
 ## 将主角图像定位到指定菱形格子正上方
-func _position_hero_on_tile(hero: TextureRect, tile_index: int) -> void:
+func _position_hero_on_tile(hero: TextureRect, tile_index: int, p_area: Control = null) -> void:
+	var area: Control = p_area if p_area else get_node_or_null("MapArea")
+	if not area:
+		return
 	var total_span := TILE_COUNT * TILE_W + (TILE_COUNT - 1) * TILE_GAP
 	var start_x := (1280.0 - total_span) / 2.0
 	var tile_center_x := start_x + tile_index * (TILE_W + TILE_GAP) + TILE_W / 2.0
-	var area: Panel = $MapArea
 	var tile_y := (area.size.y - TILE_H) / 2.0
 	hero.position = Vector2(tile_center_x - hero.size.x / 2.0, tile_y - hero.size.y + 10)
 
@@ -606,7 +608,7 @@ func _on_move_complete() -> void:
 	var gtype: int = map_grids[player_grid_index % map_total_grids]
 	var ctx := { "player_level": player_level, "player_gold": player_gold }
 	var result: Dictionary = executor.execute(gtype, ctx)
-	print("[Grid] 格子类型=", gtype, " (", GridExecutor.TYPE_NAME.get(gtype, "?"), ") → ", result["event"])
+	print("[Grid] 格子类型=", gtype, " → ", result["event"])
 
 	_check_poker_hand()
 	_refresh_top_bar()
