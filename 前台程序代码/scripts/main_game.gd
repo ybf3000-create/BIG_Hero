@@ -56,12 +56,12 @@ const VISIBLE_AFTER: int  = 4
 
 const GridTileCls = preload("res://scripts/grid_tile.gd")
 
-# 菱形格子尺寸
-const TILE_W: float = 130.0
-const TILE_H: float = 65.0
-const TILE_SPACING: float = 55.0  # 中心间距（重叠10px）
+# 矩形格子尺寸
+const TILE_W: float = 150.0
+const TILE_H: float = 100.0
+const TILE_GAP: float = 10.0   # 左右间隔
 const TILE_COUNT: int = 7
-const TILE_Y: float = 310.0  # 格子在 MapArea 内的 y 坐标
+# TILE_Y 在 _build_map_area 中动态计算（MapArea 高度 - 格子高度）/ 2
 
 
 ## ============ _ready ============
@@ -320,20 +320,22 @@ func _build_map_area() -> void:
 	bg_hint.position = Vector2(540, 120)
 	area.add_child(bg_hint)
 
-	# -- 菱形地图格子 --
-	var total_span := (TILE_COUNT - 1) * TILE_SPACING
+	# -- 矩形地图格子（底边水平，左右相接） --
+	var total_span := TILE_COUNT * TILE_W + (TILE_COUNT - 1) * TILE_GAP
 	var start_x := (1280.0 - total_span) / 2.0
+	var tile_y := (area.size.y - TILE_H) / 2.0
 	var slot_names := ["PrevGrid2", "PrevGrid1", "CurrentGrid", "NextGrid1", "NextGrid2", "NextGrid3", "NextGrid4"]
 
 	for i in range(TILE_COUNT):
 		var tile = GridTileCls.new()
 		tile.name = slot_names[i]
-		tile.position = Vector2(start_x + i * TILE_SPACING - TILE_W / 2.0, TILE_Y)
+		tile.position = Vector2(start_x + i * (TILE_W + TILE_GAP), tile_y)
 		tile.size = Vector2(TILE_W, TILE_H)
-		tile.set_label_positions(10, TILE_H - 24)
+		tile.set_label_positions(0, 0)  # 内部自适应
 		area.add_child(tile)
 
 	# -- 主角图像（放在格子上方，最后添加=最上层） --
+	var grid_tile_y := (area.size.y - TILE_H) / 2.0
 	var hero_tex := load("res://assets/主角.bmp")
 	if hero_tex:
 		var hero := TextureRect.new()
@@ -349,7 +351,7 @@ func _build_map_area() -> void:
 		fallback.name = "HeroFallback"
 		fallback.text = "🚶"
 		fallback.add_theme_font_size_override("font_size", 64)
-		fallback.position = Vector2(608, TILE_Y - 80)
+		fallback.position = Vector2(608, grid_tile_y - 80)
 		area.add_child(fallback)
 
 	# -- 位置计数 --
@@ -359,7 +361,7 @@ func _build_map_area() -> void:
 	pos_lbl.add_theme_font_size_override("font_size", 10)
 	pos_lbl.add_theme_color_override("font_color", Color(0.35, 0.35, 0.4))
 	pos_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	pos_lbl.position = Vector2(0, TILE_Y + TILE_H + 10)
+	pos_lbl.position = Vector2(0, grid_tile_y + TILE_H + 10)
 	pos_lbl.size = Vector2(1280, 14)
 	area.add_child(pos_lbl)
 
@@ -378,10 +380,12 @@ func _build_map_area() -> void:
 
 ## 将主角图像定位到指定菱形格子正上方
 func _position_hero_on_tile(hero: TextureRect, tile_index: int) -> void:
-	var total_span := (TILE_COUNT - 1) * TILE_SPACING
+	var total_span := TILE_COUNT * TILE_W + (TILE_COUNT - 1) * TILE_GAP
 	var start_x := (1280.0 - total_span) / 2.0
-	var tile_center_x := start_x + tile_index * TILE_SPACING
-	hero.position = Vector2(tile_center_x - hero.size.x / 2.0, TILE_Y - hero.size.y + 25)
+	var tile_center_x := start_x + tile_index * (TILE_W + TILE_GAP) + TILE_W / 2.0
+	var area: Panel = $MapArea
+	var tile_y := (area.size.y - TILE_H) / 2.0
+	hero.position = Vector2(tile_center_x - hero.size.x / 2.0, tile_y - hero.size.y + 10)
 
 
 ## ============================================================
