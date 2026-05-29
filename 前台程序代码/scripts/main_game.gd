@@ -483,8 +483,12 @@ func _load_from_save_data(data: Dictionary) -> void:
 	player_revive = data.get("revive_coins", 3)
 	player_grid_index = data.get("grid_index", 0)
 	map_total_grids = data.get("map_total_grids", 28)
-	map_grids = data.get("map_grids", []) as Array[int]
-	last_dice_history = data.get("dice_history", []) as Array[int]
+	map_grids.clear()
+	for item in data.get("map_grids", []):
+		map_grids.append(int(item))
+	last_dice_history.clear()
+	for item in data.get("dice_history", []):
+		last_dice_history.append(int(item))
 	poker_records = data.get("poker_records", []) as Array[Dictionary]
 	_refresh_poker_slots()
 

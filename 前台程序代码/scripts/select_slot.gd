@@ -162,8 +162,18 @@ func _on_slot_clicked(slot: int) -> void:
 	var info: Dictionary = _sm().get_slot_info(slot)
 	if info["empty"]:
 		_show_create_dialog(slot)
-	else:
-		_show_slot_actions(slot, info)
+		return
+
+	# 如果点击的是非激活槽位 → 直接切换
+	if _active_slot != slot:
+		_active_slot = slot
+		_refresh_slots()
+		return
+
+	# 点击已激活槽位 → 开始游戏
+	var data: Dictionary = _sm().load_game(slot)
+	if not data.is_empty():
+		_start_game(slot, data)
 
 
 ## ============ 创建角色弹窗 ============
@@ -280,13 +290,6 @@ func _show_create_dialog(slot: int) -> void:
 
 ## ============ 已有存档操作 ============
 
-func _show_slot_actions(slot: int, info: Dictionary) -> void:
-	# 如果点击的是非激活槽位 → 直接切换
-	if _active_slot != slot:
-		_active_slot = slot
-		_refresh_slots()
-		return
-
 	# 点击已激活槽位 → 开始游戏
 	var data: Dictionary = _sm().load_game(slot)
 	if not data.is_empty():
@@ -351,18 +354,17 @@ func _show_delete_dialog(slot: int, info: Dictionary) -> void:
 	_btn_style(cancel_btn, Color(0.2, 0.3, 0.2))
 	dlg.add_child(cancel_btn)
 
-	var confirmed := false
+	var _state: Dictionary = { "confirmed": false, "elapsed": 0.0 }
 	var countdown := Timer.new()
 	countdown.wait_time = 0.1
-	var elapsed: float = 0.0
 	countdown.timeout.connect(func():
-		if confirmed:
+		if _state["confirmed"]:
 			countdown.stop()
 			return
-		elapsed += 0.1
-		progress.value = elapsed
-		if elapsed >= 3.0:
-			confirmed = true
+		_state["elapsed"] += 0.1
+		progress.value = _state["elapsed"]
+		if _state["elapsed"] >= 3.0:
+			_state["confirmed"] = true
 			_sm().delete_slot(slot)
 			if _active_slot == slot:
 				_active_slot = -1
@@ -373,7 +375,7 @@ func _show_delete_dialog(slot: int, info: Dictionary) -> void:
 	dlg.add_child(countdown)
 
 	cancel_btn.pressed.connect(func():
-		confirmed = true
+		_state["confirmed"] = true
 		dlg.queue_free()
 	)
 

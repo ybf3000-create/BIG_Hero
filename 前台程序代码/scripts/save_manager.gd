@@ -47,11 +47,11 @@ func get_all_slots() -> Array[Dictionary]:
 
 ## ============ 创建角色 ============
 
-func create_character(slot: int, name: String) -> Dictionary:
+func create_character(slot: int, char_name: String) -> Dictionary:
 	var now := int(Time.get_unix_time_from_system())
 	var data: Dictionary = {
 		"version": SAVE_VERSION,
-		"character_name": name,
+		"character_name": char_name,
 		"created_at": now,
 		"last_saved": now,
 		"last_online": now,
@@ -104,9 +104,9 @@ func delete_slot(slot: int) -> void:
 
 ## ============ 名称校验 ============
 
-func validate_name(name: String) -> Dictionary:
+func validate_name(input_name: String) -> Dictionary:
 	# 去除首尾空格
-	var trimmed := name.strip_edges()
+	var trimmed := input_name.strip_edges()
 	if trimmed.is_empty():
 		return { "valid": false, "error": "名称不能为空", "byte_count": 0 }
 
