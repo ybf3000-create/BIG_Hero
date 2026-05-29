@@ -288,14 +288,6 @@ func _show_create_dialog(slot: int) -> void:
 	input.grab_focus()
 
 
-## ============ 已有存档操作 ============
-
-	# 点击已激活槽位 → 开始游戏
-	var data: Dictionary = _sm().load_game(slot)
-	if not data.is_empty():
-		_start_game(slot, data)
-
-
 ## ============ 删除存档 ============
 
 func _show_delete_dialog(slot: int, info: Dictionary) -> void:
@@ -371,8 +363,8 @@ func _show_delete_dialog(slot: int, info: Dictionary) -> void:
 			dlg.queue_free()
 			_refresh_slots()
 	)
-	countdown.start()
 	dlg.add_child(countdown)
+	countdown.start()
 
 	cancel_btn.pressed.connect(func():
 		_state["confirmed"] = true
