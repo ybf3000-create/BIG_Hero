@@ -48,6 +48,7 @@ var last_dice_suit: String = ""
 var last_dice_history: Array[int] = []
 var poker_records: Array[Dictionary] = []
 var auto_play_enabled: bool = false
+var _current_slot: int = -1  # 当前存档槽位
 
 const VISIBLE_BEFORE: int = 2
 const VISIBLE_AFTER: int  = 4
@@ -67,10 +68,17 @@ func _ready() -> void:
 	anchor_right  = 1.0
 	anchor_bottom = 1.0
 
+	# 从选择界面传来的存档数据
+	if has_meta("save_slot") and has_meta("save_data"):
+		_current_slot = get_meta("save_slot") as int
+		var data: Dictionary = get_meta("save_data") as Dictionary
+		_load_from_save_data(data)
+
 	_build_top_bar()
 	_build_map_area()
 	_build_bottom_bar()
-	_generate_mock_map()
+	if map_grids.is_empty():
+		_generate_mock_map()
 	_refresh_grid_display()
 
 	# 信号
@@ -80,6 +88,10 @@ func _ready() -> void:
 	$BottomBar/LogBtn.pressed.connect(_on_log_pressed)
 	$BottomBar/SettingsBtn.pressed.connect(_on_settings_pressed)
 	$MapArea/AutoPlayCheck.toggled.connect(_on_auto_play_toggled)
+
+
+func _sm():
+	return get_node_or_null("/root/SaveManager")
 
 
 ## ============================================================
@@ -406,7 +418,7 @@ func _build_bottom_bar() -> void:
 		{ "name": "BagBtn",       "text": "🎒 背包",  "x": GAP },
 		{ "name": "SkillBtn",     "text": "⚡ 技能",  "x": GAP + SMALL_W + GAP },
 		{ "name": "LogBtn",       "text": "📋 日志",  "x": dice_x + DICE_W + GAP },
-		{ "name": "SettingsBtn",  "text": "⚙️ 设置",  "x": dice_x + DICE_W + GAP + SMALL_W + GAP },
+		{ "name": "SettingsBtn",  "text": "🏠 主界面",  "x": dice_x + DICE_W + GAP + SMALL_W + GAP },
 	]
 	for b in btn_defs:
 		var btn := Button.new()
@@ -458,6 +470,45 @@ func _on_auto_dice_roll() -> void:
 
 
 ## ============================================================
+## 从存档数据恢复状态
+## ============================================================
+func _load_from_save_data(data: Dictionary) -> void:
+	if data.is_empty():
+		return
+	player_name = data.get("character_name", "勇者")
+	player_level = data.get("level", 1)
+	player_exp = data.get("exp", 0)
+	player_exp_max = data.get("exp_max", 100)
+	player_gold = data.get("gold", 0)
+	player_revive = data.get("revive_coins", 3)
+	player_grid_index = data.get("grid_index", 0)
+	map_total_grids = data.get("map_total_grids", 28)
+	map_grids = data.get("map_grids", []) as Array[int]
+	last_dice_history = data.get("dice_history", []) as Array[int]
+	poker_records = data.get("poker_records", []) as Array[Dictionary]
+	_refresh_poker_slots()
+
+
+## ============================================================
+## 构建存档数据
+## ============================================================
+func _build_save_data() -> Dictionary:
+	return {
+		"character_name": player_name,
+		"level": player_level,
+		"exp": player_exp,
+		"exp_max": player_exp_max,
+		"gold": player_gold,
+		"revive_coins": player_revive,
+		"grid_index": player_grid_index,
+		"map_total_grids": map_total_grids,
+		"map_grids": map_grids,
+		"dice_history": last_dice_history,
+		"poker_records": poker_records,
+	}
+
+
+## ============================================================
 ## 掷骰逻辑
 ## ============================================================
 func _on_dice_roll() -> void:
@@ -496,9 +547,20 @@ func _on_dice_roll() -> void:
 	_refresh_top_bar()
 	_refresh_grid_display()
 
+	# 自动保存
+	_auto_save()
+
 	# 自动挂机：继续下一次掷骰
 	if auto_play_enabled:
 		_start_auto_timer()
+
+
+func _auto_save() -> void:
+	if _current_slot < 0:
+		return
+	var sm = _sm()
+	if sm:
+		sm.save_game(_current_slot, _build_save_data())
 
 
 ## ============================================================
@@ -687,7 +749,10 @@ func _show_dice_popup(roll: int, suit: String) -> void:
 func _on_bag_pressed()     -> void: print("[主界面] 打开背包")
 func _on_skill_pressed()   -> void: print("[主界面] 打开技能")
 func _on_log_pressed()     -> void: print("[主界面] 打开日志")
-func _on_settings_pressed()-> void: print("[主界面] 打开设置")
+func _on_settings_pressed()-> void:
+	_auto_save()
+	if get_tree():
+		get_tree().change_scene_to_file("res://scenes/select_slot.tscn")
 
 
 ## ============ 样式工具 ============
