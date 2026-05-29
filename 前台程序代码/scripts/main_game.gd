@@ -1,8 +1,8 @@
 extends Control
 
 ## ============================================================
-## 大勇者 - 主游戏界面 v0.4
-## 三分区 + 掷骰奖励系统（扑克牌牌型）
+## 大勇者 - 主游戏界面 v0.5
+## 菱形格子 + 主角叠格子 + 单行按钮 + 自动挂机
 ## ============================================================
 
 # -- 格子类型 --
@@ -23,7 +23,7 @@ const GRID_TYPES = [
 	{ "icon": "💰", "name": "空地2",     "clr": Color(0.3, 0.5, 0.2) },
 ]
 
-# 扑克牌花色（♠♣ 黑 / ♥♦ 红）
+# 扑克牌花色
 const SUITS := ["♠", "♣", "♥", "♦"]
 const SUIT_COLORS := {
 	"♠": Color(0.75, 0.78, 0.82),
@@ -46,12 +46,20 @@ var map_grids: Array[int] = []
 var last_dice_roll: int = 0
 var last_dice_suit: String = ""
 var last_dice_history: Array[int] = []
-
-# 扑克牌牌型记录（最近3次掷骰）
 var poker_records: Array[Dictionary] = []
+var auto_play_enabled: bool = false
 
 const VISIBLE_BEFORE: int = 2
 const VISIBLE_AFTER: int  = 4
+
+const GridTileCls = preload("res://scripts/grid_tile.gd")
+
+# 菱形格子尺寸
+const TILE_W: float = 130.0
+const TILE_H: float = 65.0
+const TILE_SPACING: float = 55.0  # 中心间距（重叠10px）
+const TILE_COUNT: int = 7
+const TILE_Y: float = 310.0  # 格子在 MapArea 内的 y 坐标
 
 
 ## ============ _ready ============
@@ -71,12 +79,11 @@ func _ready() -> void:
 	$BottomBar/SkillBtn.pressed.connect(_on_skill_pressed)
 	$BottomBar/LogBtn.pressed.connect(_on_log_pressed)
 	$BottomBar/SettingsBtn.pressed.connect(_on_settings_pressed)
+	$MapArea/AutoPlayCheck.toggled.connect(_on_auto_play_toggled)
 
 
 ## ============================================================
-## 第一部分 — 顶部角色属性栏 (h=110)
-##   左侧：头像/名字/等级/经验 | 复活币/金币/奖励 | 花色记录
-##   右侧：掷骰点数 + 花色 + 牌型记录
+## 第一部分 — 顶部属性栏
 ## ============================================================
 func _build_top_bar() -> void:
 	var bar := Panel.new()
@@ -197,13 +204,11 @@ func _build_top_bar() -> void:
 	bar.add_child(dice_hist)
 
 	# ============ 右侧：掷骰点数 + 花色 + 牌型记录 ============
-	# 分隔线
 	var sep := VSeparator.new()
 	sep.position = Vector2(620, 12)
 	sep.size = Vector2(2, 86)
 	bar.add_child(sep)
 
-	# 右侧标题
 	var dice_title := Label.new()
 	dice_title.text = "本次掷骰"
 	dice_title.add_theme_font_size_override("font_size", 11)
@@ -211,18 +216,15 @@ func _build_top_bar() -> void:
 	dice_title.position = Vector2(640, 6)
 	bar.add_child(dice_title)
 
-	# 点数数字（大）
 	var dice_num := Label.new()
 	dice_num.name = "DiceNumLabel"
 	dice_num.text = "--"
 	dice_num.add_theme_font_size_override("font_size", 36)
 	dice_num.add_theme_color_override("font_color", Color(1.0, 0.9, 0.3))
-	dice_num.add_theme_font_override("font", load("res://"))
 	dice_num.position = Vector2(640, 18)
 	dice_num.size = Vector2(60, 42)
 	bar.add_child(dice_num)
 
-	# 花色符号（大）
 	var suit_lbl := Label.new()
 	suit_lbl.name = "DiceSuitLabel"
 	suit_lbl.text = ""
@@ -231,7 +233,6 @@ func _build_top_bar() -> void:
 	suit_lbl.size = Vector2(50, 48)
 	bar.add_child(suit_lbl)
 
-	# 牌型记录区标题
 	var poker_title := Label.new()
 	poker_title.text = "牌型记录 (3次结算)"
 	poker_title.add_theme_font_size_override("font_size", 11)
@@ -239,9 +240,7 @@ func _build_top_bar() -> void:
 	poker_title.position = Vector2(780, 6)
 	bar.add_child(poker_title)
 
-	# 3个牌型记录槽
 	for i in range(3):
-		# 背景框
 		var slot_bg := ColorRect.new()
 		slot_bg.name = "PokerSlotBg" + str(i)
 		slot_bg.position = Vector2(780 + i * 115, 20)
@@ -249,7 +248,6 @@ func _build_top_bar() -> void:
 		slot_bg.color = Color(0.15, 0.15, 0.22)
 		bar.add_child(slot_bg)
 
-		# 数字
 		var val_lbl := Label.new()
 		val_lbl.name = "PokerVal" + str(i)
 		val_lbl.text = "-"
@@ -260,7 +258,6 @@ func _build_top_bar() -> void:
 		val_lbl.size = Vector2(60, 30)
 		bar.add_child(val_lbl)
 
-		# 花色
 		var suit_s := Label.new()
 		suit_s.name = "PokerSuit" + str(i)
 		suit_s.text = ""
@@ -270,7 +267,6 @@ func _build_top_bar() -> void:
 		suit_s.size = Vector2(60, 30)
 		bar.add_child(suit_s)
 
-		# 连字号
 		if i < 2:
 			var arrow := Label.new()
 			arrow.text = "→"
@@ -279,7 +275,6 @@ func _build_top_bar() -> void:
 			arrow.position = Vector2(888 + i * 115, 36)
 			bar.add_child(arrow)
 
-	# 牌型结果标签
 	var poker_result := Label.new()
 	poker_result.name = "PokerResultLabel"
 	poker_result.text = ""
@@ -294,7 +289,7 @@ func _build_top_bar() -> void:
 
 
 ## ============================================================
-## 第二部分 — 中部大地图
+## 第二部分 — 中部大地图（菱形格子 + 主角叠加）
 ## ============================================================
 func _build_map_area() -> void:
 	var area := Panel.new()
@@ -303,85 +298,80 @@ func _build_map_area() -> void:
 	area.size = Vector2(1280, 400)
 	_panel_style(area, Color(0.06, 0.07, 0.09))
 
+	# -- 场景背景提示 --
 	var bg_hint := Label.new()
 	bg_hint.text = "（场景背景区域）"
 	bg_hint.add_theme_font_size_override("font_size", 14)
 	bg_hint.add_theme_color_override("font_color", Color(0.2, 0.2, 0.25))
-	bg_hint.position = Vector2(540, 100)
+	bg_hint.position = Vector2(540, 120)
 	area.add_child(bg_hint)
 
+	# -- 菱形地图格子 --
+	var total_span := (TILE_COUNT - 1) * TILE_SPACING
+	var start_x := (1280.0 - total_span) / 2.0
+	var slot_names := ["PrevGrid2", "PrevGrid1", "CurrentGrid", "NextGrid1", "NextGrid2", "NextGrid3", "NextGrid4"]
+
+	for i in range(TILE_COUNT):
+		var tile = GridTileCls.new()
+		tile.name = slot_names[i]
+		tile.position = Vector2(start_x + i * TILE_SPACING - TILE_W / 2.0, TILE_Y)
+		tile.size = Vector2(TILE_W, TILE_H)
+		tile.set_label_positions(10, TILE_H - 24)
+		area.add_child(tile)
+
+	# -- 主角图像（放在格子上方，最后添加=最上层） --
 	var hero_tex := load("res://assets/主角.bmp")
 	if hero_tex:
 		var hero := TextureRect.new()
 		hero.name = "HeroOnMap"
-		hero.position = Vector2(560, 130)
-		hero.size = Vector2(160, 160)
 		hero.texture = hero_tex
 		hero.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		hero.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		hero.size = Vector2(120, 120)
 		area.add_child(hero)
+		_position_hero_on_tile(hero, 3)  # 初始在当前格
 	else:
 		var fallback := Label.new()
 		fallback.name = "HeroFallback"
 		fallback.text = "🚶"
-		fallback.add_theme_font_size_override("font_size", 72)
-		fallback.position = Vector2(600, 170)
+		fallback.add_theme_font_size_override("font_size", 64)
+		fallback.position = Vector2(608, TILE_Y - 80)
 		area.add_child(fallback)
 
-	# 地图格子行
-	const G_W := 92
-	const G_H := 88
-	var total_w := 7 * G_W
-	var start_x := (1280.0 - float(total_w)) / 2.0
-	var grid_y := 290
-	var slot_names := ["PrevGrid2", "PrevGrid1", "CurrentGrid", "NextGrid1", "NextGrid2", "NextGrid3", "NextGrid4"]
-
-	for i in range(7):
-		var grid := Panel.new()
-		grid.name = slot_names[i]
-		grid.position = Vector2(start_x + i * G_W, grid_y)
-		grid.size = Vector2(G_W - 4, G_H)
-
-		var bg := ColorRect.new()
-		bg.name = "BG"
-		bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		grid.add_child(bg)
-
-		var icon := Label.new()
-		icon.name = "Icon"
-		icon.add_theme_font_size_override("font_size", 30)
-		icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		icon.position = Vector2(0, 8)
-		icon.size = Vector2(G_W - 4, 36)
-		grid.add_child(icon)
-
-		var name_lbl := Label.new()
-		name_lbl.name = "Name"
-		name_lbl.add_theme_font_size_override("font_size", 9)
-		name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		name_lbl.position = Vector2(0, G_H - 22)
-		name_lbl.size = Vector2(G_W - 4, 14)
-		grid.add_child(name_lbl)
-
-		area.add_child(grid)
-
+	# -- 位置计数 --
 	var pos_lbl := Label.new()
 	pos_lbl.name = "GridPosLabel"
 	pos_lbl.text = "位置: 0/" + str(map_total_grids)
 	pos_lbl.add_theme_font_size_override("font_size", 10)
 	pos_lbl.add_theme_color_override("font_color", Color(0.35, 0.35, 0.4))
 	pos_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	pos_lbl.position = Vector2(0, grid_y + G_H + 4)
+	pos_lbl.position = Vector2(0, TILE_Y + TILE_H + 10)
 	pos_lbl.size = Vector2(1280, 14)
 	area.add_child(pos_lbl)
+
+	# -- 右上角：自动挂机勾选 --
+	var auto_check := CheckBox.new()
+	auto_check.name = "AutoPlayCheck"
+	auto_check.text = "自动挂机"
+	auto_check.add_theme_font_size_override("font_size", 14)
+	auto_check.add_theme_color_override("font_color", Color(0.7, 0.9, 0.7))
+	auto_check.button_pressed = false
+	auto_check.position = Vector2(1120, 10)
+	area.add_child(auto_check)
 
 	add_child(area)
 
 
+## 将主角图像定位到指定菱形格子正上方
+func _position_hero_on_tile(hero: TextureRect, tile_index: int) -> void:
+	var total_span := (TILE_COUNT - 1) * TILE_SPACING
+	var start_x := (1280.0 - total_span) / 2.0
+	var tile_center_x := start_x + tile_index * TILE_SPACING
+	hero.position = Vector2(tile_center_x - hero.size.x / 2.0, TILE_Y - hero.size.y + 25)
+
+
 ## ============================================================
-## 第三部分 — 底部功能按钮组
-##   🎲 掷骰 大按钮在中间（原"点数: ?"位置）
-##   4个功能按钮在下方
+## 第三部分 — 底部按钮组（单行：背包 技能 | 掷骰 | 日志 设置）
 ## ============================================================
 func _build_bottom_bar() -> void:
 	var bar := Panel.new()
@@ -390,55 +380,98 @@ func _build_bottom_bar() -> void:
 	bar.size = Vector2(1280, 86)
 	_panel_style(bar, Color(0.10, 0.10, 0.16))
 
-	# -- 掷骰大按钮（居中，原"点数: ?"位置）--
+	# 单行布局：4小按钮(w=170) + 1大按钮(w=260) = 940，剩余 340 / 6间隔 = 57
+	const SMALL_W := 170
+	const SMALL_H := 38
+	const DICE_W := 260
+	const DICE_H := 42
+	const GAP := 57
+
+	var dice_x := GAP + SMALL_W + GAP + SMALL_W + GAP  # = 57+170+57+170+57 = 511
+	var btn_y := (86.0 - SMALL_H) / 2.0
+	var dice_y := (86.0 - DICE_H) / 2.0
+
+	# -- 掷骰大按钮（居中） --
 	var dice_btn := Button.new()
 	dice_btn.name = "DiceRollBtn"
 	dice_btn.text = "🎲  掷  骰"
-	dice_btn.position = Vector2(440, 6)
-	dice_btn.size = Vector2(400, 40)
-	_btn_style(dice_btn, Color(0.15, 0.25, 0.45))
+	dice_btn.position = Vector2(dice_x, dice_y)
+	dice_btn.size = Vector2(DICE_W, DICE_H)
+	_btn_style(dice_btn, Color(0.15, 0.28, 0.50))
 	dice_btn.add_theme_font_size_override("font_size", 22)
 	bar.add_child(dice_btn)
 
-	# -- 功能按钮（4个均匀分布: 1280总宽 - 4×180 = 560 / 5间隔 = 112） --
-	var btn_data := [
-		{ "name": "BagBtn",       "text": "🎒 背包",  "x": 112 },
-		{ "name": "SkillBtn",     "text": "⚡ 技能",  "x": 404 },
-		{ "name": "LogBtn",       "text": "📋 日志",  "x": 696 },
-		{ "name": "SettingsBtn",  "text": "⚙️ 设置",  "x": 988 },
+	# -- 功能按钮（左侧2个 + 右侧2个） --
+	var btn_defs := [
+		{ "name": "BagBtn",       "text": "🎒 背包",  "x": GAP },
+		{ "name": "SkillBtn",     "text": "⚡ 技能",  "x": GAP + SMALL_W + GAP },
+		{ "name": "LogBtn",       "text": "📋 日志",  "x": dice_x + DICE_W + GAP },
+		{ "name": "SettingsBtn",  "text": "⚙️ 设置",  "x": dice_x + DICE_W + GAP + SMALL_W + GAP },
 	]
-	for b in btn_data:
+	for b in btn_defs:
 		var btn := Button.new()
 		btn.name = b["name"]
 		btn.text = b["text"]
-		btn.position = Vector2(b["x"], 50)
-		btn.size = Vector2(180, 32)
+		btn.position = Vector2(b["x"], btn_y)
+		btn.size = Vector2(SMALL_W, SMALL_H)
 		_btn_style(btn, Color(0.18, 0.22, 0.34))
-		btn.add_theme_font_size_override("font_size", 15)
+		btn.add_theme_font_size_override("font_size", 16)
 		bar.add_child(btn)
 
 	add_child(bar)
 
 
 ## ============================================================
-## 掷骰逻辑（含扑克牌牌型系统）
+## 自动挂机
+## ============================================================
+func _on_auto_play_toggled(pressed: bool) -> void:
+	auto_play_enabled = pressed
+	if pressed:
+		# 启动自动掷骰计时器
+		_start_auto_timer()
+	else:
+		# 停止计时器
+		_stop_auto_timer()
+
+
+func _start_auto_timer() -> void:
+	var timer := get_node_or_null("AutoPlayTimer") as Timer
+	if not timer:
+		timer = Timer.new()
+		timer.name = "AutoPlayTimer"
+		timer.one_shot = true
+		timer.timeout.connect(_on_auto_dice_roll)
+		add_child(timer)
+	timer.start(1.5)
+
+
+func _stop_auto_timer() -> void:
+	var timer := get_node_or_null("AutoPlayTimer") as Timer
+	if timer:
+		timer.stop()
+
+
+func _on_auto_dice_roll() -> void:
+	if not auto_play_enabled:
+		return
+	_on_dice_roll()
+
+
+## ============================================================
+## 掷骰逻辑
 ## ============================================================
 func _on_dice_roll() -> void:
 	last_dice_roll = randi() % 6 + 1
 	last_dice_suit = SUITS[randi() % 4]
 
-	# 更新右上角点数 + 花色显示
 	_refresh_dice_display()
 
-	# 记录扑克牌型
 	var record := { "value": last_dice_roll, "suit": last_dice_suit }
 	poker_records.append(record)
 	_refresh_poker_slots()
 
-	# 花色弹窗（显示 1 秒）
 	_show_dice_popup(last_dice_roll, last_dice_suit)
 
-	# 骰子历史
 	last_dice_history.append(last_dice_roll)
 	while last_dice_history.size() > 6:
 		last_dice_history.pop_front()
@@ -449,44 +482,44 @@ func _on_dice_roll() -> void:
 	if hist_lbl:
 		hist_lbl.text = hist_text
 
-	# 前进
 	var prev_idx := player_grid_index
 	player_grid_index = (player_grid_index + last_dice_roll) % map_total_grids
 
-	# 过起点奖励
 	var reward_lbl: Label = $TopBar/DiceRewardLabel as Label
 	if prev_idx + last_dice_roll >= map_total_grids:
 		player_gold += 50
 		if reward_lbl:
 			reward_lbl.text = "🎲 掷骰奖励: 过起点 +50金!"
 
-	# 扑克牌牌型结算（每3次掷骰）
 	_check_poker_hand()
 
 	_refresh_top_bar()
 	_refresh_grid_display()
 
+	# 自动挂机：继续下一次掷骰
+	if auto_play_enabled:
+		_start_auto_timer()
+
 
 ## ============================================================
-## 扑克牌牌型检测 + 结算
+## 扑克牌牌型检测
 ## ============================================================
 func _check_poker_hand() -> void:
 	if poker_records.size() < 3:
 		return
 
 	var vals: Array[int] = []
-	var suits: Array[String] = []
+	var suits_arr: Array[String] = []
 	for r in poker_records:
 		vals.append(r["value"] as int)
-		suits.append(r["suit"] as String)
+		suits_arr.append(r["suit"] as String)
 
 	var sorted: Array[int] = vals.duplicate()
 	sorted.sort()
 
-	var is_flush: bool = (suits[0] == suits[1] and suits[1] == suits[2])
+	var is_flush: bool = (suits_arr[0] == suits_arr[1] and suits_arr[1] == suits_arr[2])
 	var is_straight: bool = (sorted[2] - sorted[1] == 1 and sorted[1] - sorted[0] == 1)
 
-	# 统计数值重复
 	var count_map: Dictionary = {}
 	for v in vals:
 		count_map[v] = count_map.get(v, 0) + 1
@@ -498,22 +531,16 @@ func _check_poker_hand() -> void:
 	var multiplier: int = 0
 
 	if is_flush and is_straight:
-		hand_name = "同花顺"
-		multiplier = 10
+		hand_name = "同花顺"; multiplier = 10
 	elif max_count >= 3:
-		hand_name = "三条"
-		multiplier = 6
+		hand_name = "三条"; multiplier = 6
 	elif is_straight:
-		hand_name = "顺子"
-		multiplier = 4
+		hand_name = "顺子"; multiplier = 4
 	elif is_flush:
-		hand_name = "同花"
-		multiplier = 3
+		hand_name = "同花"; multiplier = 3
 	elif max_count >= 2:
-		hand_name = "一对"
-		multiplier = 2
+		hand_name = "一对"; multiplier = 2
 
-	# 结算
 	var result_lbl: Label = $TopBar/PokerResultLabel as Label
 	if multiplier > 0:
 		var bonus := player_level * (randi() % 41 + 10) * multiplier
@@ -524,32 +551,26 @@ func _check_poker_hand() -> void:
 		if result_lbl:
 			result_lbl.text = "未成牌型"
 
-	# 清空记录，重新开始
 	poker_records.clear()
 
 
 ## ============================================================
-## 刷新右侧骰子显示
+## 刷新
 ## ============================================================
 func _refresh_dice_display() -> void:
 	var num_lbl: Label = $TopBar/DiceNumLabel as Label
 	if num_lbl:
 		num_lbl.text = str(last_dice_roll)
-
 	var suit_lbl: Label = $TopBar/DiceSuitLabel as Label
 	if suit_lbl:
 		suit_lbl.text = last_dice_suit
 		suit_lbl.add_theme_color_override("font_color", _suit_color(last_dice_suit))
 
 
-## ============================================================
-## 刷新牌型记录槽
-## ============================================================
 func _refresh_poker_slots() -> void:
 	for i in range(3):
 		var val_lbl: Label = $TopBar.get_node("PokerVal" + str(i)) as Label
 		var suit_lbl: Label = $TopBar.get_node("PokerSuit" + str(i)) as Label
-
 		if i < poker_records.size():
 			var rec := poker_records[i]
 			if val_lbl:
@@ -565,59 +586,10 @@ func _refresh_poker_slots() -> void:
 				suit_lbl.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
 
 
-## ============================================================
-## 花色颜色（♥♦ = 红, ♠♣ = 灰色）
-## ============================================================
 func _suit_color(s: String) -> Color:
 	return SUIT_COLORS.get(s, Color(0.8, 0.8, 0.8))
 
 
-## ============================================================
-## 骰子花色弹窗（显示 1 秒后消失）
-## ============================================================
-func _show_dice_popup(roll: int, suit: String) -> void:
-	var old_popup := get_node_or_null("DicePopup")
-	if old_popup:
-		old_popup.queue_free()
-
-	var popup := Panel.new()
-	popup.name = "DicePopup"
-	popup.position = Vector2(500, 170)
-	popup.size = Vector2(280, 200)
-	_panel_style(popup, Color(0.12, 0.12, 0.20, 0.94))
-
-	# 数字
-	var num_label := Label.new()
-	num_label.text = str(roll)
-	num_label.add_theme_font_size_override("font_size", 60)
-	num_label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.3))
-	num_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	num_label.position = Vector2(20, 20)
-	num_label.size = Vector2(120, 70)
-	popup.add_child(num_label)
-
-	# 花色（红桃红色）
-	var suit_label := Label.new()
-	suit_label.text = suit
-	suit_label.add_theme_font_size_override("font_size", 60)
-	suit_label.add_theme_color_override("font_color", _suit_color(suit))
-	suit_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	suit_label.position = Vector2(140, 20)
-	suit_label.size = Vector2(120, 70)
-	popup.add_child(suit_label)
-
-	add_child(popup)
-
-	var timer := get_tree().create_timer(1.0)
-	timer.timeout.connect(func():
-		if popup and is_instance_valid(popup):
-			popup.queue_free()
-	)
-
-
-## ============================================================
-## 刷新
-## ============================================================
 func _refresh_top_bar() -> void:
 	var gold_lbl: Label = $TopBar/GoldLabel as Label
 	if gold_lbl:
@@ -625,16 +597,6 @@ func _refresh_top_bar() -> void:
 	var rv_lbl: Label = $TopBar/ReviveLabel as Label
 	if rv_lbl:
 		rv_lbl.text = str(player_revive) + "/" + str(player_max_revive)
-	var lv_lbl: Label = $TopBar/LevelLabel as Label
-	if lv_lbl:
-		lv_lbl.text = "Lv." + str(player_level)
-	var exp_bar: ProgressBar = $TopBar/ExpBar as ProgressBar
-	if exp_bar:
-		exp_bar.value = player_exp
-		exp_bar.max_value = player_exp_max
-	var exp_lbl: Label = $TopBar/ExpLabel as Label
-	if exp_lbl:
-		exp_lbl.text = str(player_exp) + "/" + str(player_exp_max)
 
 
 func _refresh_grid_display() -> void:
@@ -643,29 +605,22 @@ func _refresh_grid_display() -> void:
 	var offsets := [-2, -1, 0, 1, 2, 3, 4]
 	var slot_names := ["PrevGrid2", "PrevGrid1", "CurrentGrid", "NextGrid1", "NextGrid2", "NextGrid3", "NextGrid4"]
 
-	for i in range(7):
+	for i in range(TILE_COUNT):
 		var grid_idx: int = idx + offsets[i]
-		var panel: Panel = area.get_node(slot_names[i]) as Panel
-		if not panel:
+		var tile = area.get_node(slot_names[i])
+		if not tile:
 			continue
 
 		var info := _get_grid_info(grid_idx)
-		var bg: ColorRect = panel.get_node("BG") as ColorRect
-		var icon_lbl: Label = panel.get_node("Icon") as Label
-		var name_lbl: Label = panel.get_node("Name") as Label
+		var is_current := (i == 3)
+		var fill: Color = info["clr"] if is_current else info["clr"].darkened(0.55)
+		var border: Color = Color(1.0, 1.0, 0.2, 0.9) if is_current else Color(0.5, 0.5, 0.6, 0.5)
+		tile.setup(info["icon"], info["name"] + "#" + str(grid_idx), fill, border)
 
-		bg.color = info["clr"].darkened(0.65) if i != 3 else info["clr"]
-
-		if i == 3:
-			var hl := StyleBoxFlat.new()
-			hl.bg_color = info["clr"]
-			hl.border_width_left = 3; hl.border_width_right = 3
-			hl.border_width_top = 3; hl.border_width_bottom = 3
-			hl.border_color = Color(1.0, 1.0, 0.2, 0.9)
-			panel.add_theme_stylebox_override("panel", hl)
-
-		icon_lbl.text = info["icon"]
-		name_lbl.text = info["name"] + "#" + str(grid_idx)
+	# 主角位置更新
+	var hero: TextureRect = area.get_node_or_null("HeroOnMap") as TextureRect
+	if hero:
+		_position_hero_on_tile(hero, 3)
 
 	var pos_lbl: Label = area.get_node("GridPosLabel") as Label
 	if pos_lbl:
@@ -684,6 +639,47 @@ func _generate_mock_map() -> void:
 	map_grids.append(0)
 	for i in range(1, map_total_grids):
 		map_grids.append(1 + (i % 13))
+
+
+## ============================================================
+## 骰子花色弹窗（1秒消失）
+## ============================================================
+func _show_dice_popup(roll: int, suit: String) -> void:
+	var old_popup := get_node_or_null("DicePopup")
+	if old_popup:
+		old_popup.queue_free()
+
+	var popup := Panel.new()
+	popup.name = "DicePopup"
+	popup.position = Vector2(500, 170)
+	popup.size = Vector2(280, 180)
+	_panel_style(popup, Color(0.12, 0.12, 0.20, 0.94))
+
+	var num_label := Label.new()
+	num_label.text = str(roll)
+	num_label.add_theme_font_size_override("font_size", 56)
+	num_label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.3))
+	num_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	num_label.position = Vector2(20, 20)
+	num_label.size = Vector2(120, 60)
+	popup.add_child(num_label)
+
+	var suit_label := Label.new()
+	suit_label.text = suit
+	suit_label.add_theme_font_size_override("font_size", 56)
+	suit_label.add_theme_color_override("font_color", _suit_color(suit))
+	suit_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	suit_label.position = Vector2(140, 20)
+	suit_label.size = Vector2(120, 60)
+	popup.add_child(suit_label)
+
+	add_child(popup)
+
+	var timer := get_tree().create_timer(1.0)
+	timer.timeout.connect(func():
+		if popup and is_instance_valid(popup):
+			popup.queue_free()
+	)
 
 
 ## ============ 按钮回调 ============
@@ -727,5 +723,4 @@ func _btn_style(btn: Button, clr: Color) -> void:
 	var p := n.duplicate() as StyleBoxFlat
 	p.bg_color = clr.darkened(0.15)
 	btn.add_theme_stylebox_override("pressed", p)
-	btn.add_theme_font_size_override("font_size", 16)
 	btn.add_theme_color_override("font_color", Color.WHITE)
