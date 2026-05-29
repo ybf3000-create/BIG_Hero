@@ -294,85 +294,138 @@ func _show_delete_dialog(slot: int, info: Dictionary) -> void:
 	if info["empty"]:
 		return
 
-	var dlg := Window.new()
-	dlg.name = "DeleteDialog"
-	dlg.title = "删除存档"
-	dlg.size = Vector2(400, 250)
-	dlg.position = Vector2(440, 250)
-	dlg.unresizable = true
-	dlg.popup_window = true
+	# 全屏半透明遮罩
+	var overlay := ColorRect.new()
+	overlay.name = "DeleteOverlay"
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.color = Color(0, 0, 0, 0.6)
+	add_child(overlay)
 
-	var bg := ColorRect.new()
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0.16, 0.10, 0.10)
-	dlg.add_child(bg)
+	# 对话框面板
+	var D_WIDTH := 440.0
+	var D_HEIGHT := 300.0
+	var dlg := Panel.new()
+	dlg.name = "DeletePanel"
+	dlg.position = Vector2((1280.0 - D_WIDTH) / 2.0, (720.0 - D_HEIGHT) / 2.0)
+	dlg.size = Vector2(D_WIDTH, D_HEIGHT)
+	var dlg_bg := StyleBoxFlat.new()
+	dlg_bg.bg_color = Color(0.15, 0.10, 0.10)
+	dlg_bg.set_corner_radius_all(12)
+	dlg_bg.border_color = Color(0.6, 0.2, 0.2, 0.5)
+	dlg_bg.border_width_left = 2; dlg_bg.border_width_right = 2
+	dlg_bg.border_width_top = 2; dlg_bg.border_width_bottom = 2
+	dlg.add_theme_stylebox_override("panel", dlg_bg)
+	overlay.add_child(dlg)
 
-	var warn := Label.new()
-	warn.text = "⚠ 确定要删除「" + info["name"] + "」吗？"
-	warn.add_theme_font_size_override("font_size", 18)
-	warn.add_theme_color_override("font_color", Color(1.0, 0.4, 0.3))
-	warn.position = Vector2(20, 20)
-	dlg.add_child(warn)
+	# 标题
+	var title := Label.new()
+	title.text = "⚠ 删除存档「" + info["name"] + "」"
+	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", Color(1.0, 0.35, 0.3))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.position = Vector2(20, 20)
+	title.size = Vector2(D_WIDTH - 40, 30)
+	dlg.add_child(title)
 
+	# 存档详情
 	var detail := Label.new()
-	detail.text = "等级 Lv." + str(info["level"]) + " · 金币 " + str(info["gold"])
-	detail.add_theme_font_size_override("font_size", 14)
+	detail.text = "Lv." + str(info["level"]) + "  ·  " + str(info["gold"]) + " 金币"
+	detail.add_theme_font_size_override("font_size", 16)
 	detail.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+	detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	detail.position = Vector2(20, 55)
+	detail.size = Vector2(D_WIDTH - 40, 22)
 	dlg.add_child(detail)
 
-	var note := Label.new()
-	note.text = "此操作不可撤销！3秒后自动确认"
-	note.add_theme_font_size_override("font_size", 14)
-	note.add_theme_color_override("font_color", Color(0.8, 0.3, 0.3))
-	note.position = Vector2(20, 82)
-	dlg.add_child(note)
+	# 提示文本
+	var hint := Label.new()
+	hint.text = "长按确定 3 秒后删除存档"
+	hint.add_theme_font_size_override("font_size", 14)
+	hint.add_theme_color_override("font_color", Color(0.85, 0.3, 0.3))
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.position = Vector2(20, 90)
+	hint.size = Vector2(D_WIDTH - 40, 20)
+	dlg.add_child(hint)
 
-	# 倒计时进度条
+	# 进度条（初始不可见，按压时出现）
 	var progress := ProgressBar.new()
 	progress.name = "DeleteProgress"
 	progress.value = 0.0
 	progress.max_value = 3.0
-	progress.position = Vector2(20, 125)
-	progress.size = Vector2(360, 30)
-	_bar_style(progress, Color(0.8, 0.2, 0.2))
+	progress.position = Vector2(40, 130)
+	progress.size = Vector2(D_WIDTH - 80, 26)
+	_bar_style(progress, Color(0.85, 0.18, 0.18))
 	dlg.add_child(progress)
+
+	# 按钮
+	const BTN_W := 170.0
+	const BTN_H := 44.0
+	var btn_y := 180.0
+	var gap := (D_WIDTH - BTN_W * 2) / 3.0
 
 	# 取消按钮
 	var cancel_btn := Button.new()
-	cancel_btn.text = "取消删除"
-	cancel_btn.position = Vector2(20, 185)
-	cancel_btn.size = Vector2(360, 40)
-	_btn_style(cancel_btn, Color(0.2, 0.3, 0.2))
+	cancel_btn.text = "取 消"
+	cancel_btn.position = Vector2(gap, btn_y)
+	cancel_btn.size = Vector2(BTN_W, BTN_H)
+	_btn_style(cancel_btn, Color(0.22, 0.24, 0.30))
+	cancel_btn.pressed.connect(func():
+		overlay.queue_free()
+	)
 	dlg.add_child(cancel_btn)
 
-	var _state: Dictionary = { "confirmed": false, "elapsed": 0.0 }
-	var countdown := Timer.new()
-	countdown.wait_time = 0.1
-	countdown.timeout.connect(func():
-		if _state["confirmed"]:
-			countdown.stop()
+	# 确定按钮（长按3秒）
+	var confirm_btn := Button.new()
+	confirm_btn.name = "ConfirmBtn"
+	confirm_btn.text = "确 定"
+	confirm_btn.position = Vector2(gap * 2 + BTN_W, btn_y)
+	confirm_btn.size = Vector2(BTN_W, BTN_H)
+	_btn_style(confirm_btn, Color(0.55, 0.15, 0.12))
+	dlg.add_child(confirm_btn)
+
+	# 长按状态（包装在 Dict 中避免 lambda 捕获问题）
+	var _s: Dictionary = { "pressing": false, "elapsed": 0.0, "deleted": false }
+
+	var tick := Timer.new()
+	tick.wait_time = 0.05
+	tick.timeout.connect(func():
+		if not _s["pressing"] or _s["deleted"]:
+			if not _s["pressing"]:
+				_s["elapsed"] = 0.0
+				progress.value = 0.0
 			return
-		_state["elapsed"] += 0.1
-		progress.value = _state["elapsed"]
-		if _state["elapsed"] >= 3.0:
-			_state["confirmed"] = true
+		_s["elapsed"] += 0.05
+		progress.value = _s["elapsed"]
+		if _s["elapsed"] >= 3.0:
+			_s["deleted"] = true
+			_s["pressing"] = false
+			tick.stop()
 			_sm().delete_slot(slot)
 			if _active_slot == slot:
 				_active_slot = -1
-			dlg.queue_free()
+			overlay.queue_free()
 			_refresh_slots()
 	)
-	dlg.add_child(countdown)
-	countdown.start()
+	tick.start()
+	dlg.add_child(tick)
 
-	cancel_btn.pressed.connect(func():
-		_state["confirmed"] = true
-		dlg.queue_free()
+	confirm_btn.button_down.connect(func():
+		if _s["deleted"]: return
+		_s["pressing"] = true
+		_s["elapsed"] = 0.0
+		progress.value = 0.0
+	)
+	confirm_btn.button_up.connect(func():
+		_s["pressing"] = false
+		_s["elapsed"] = 0.0
+		progress.value = 0.0
 	)
 
-	add_child(dlg)
-	dlg.popup_centered()
+	# 点击遮罩空白处关闭
+	overlay.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+			overlay.queue_free()
+	)
 
 
 ## ============ 进入游戏 ============
