@@ -75,6 +75,7 @@ func _ready() -> void:
 		_load_from_save_data(data)
 
 	_build_top_bar()
+	_refresh_poker_slots()  # TopBar 创建后才能刷新牌型显示
 	_build_map_area()
 	_build_bottom_bar()
 	if map_grids.is_empty():
@@ -492,7 +493,7 @@ func _load_from_save_data(data: Dictionary) -> void:
 	poker_records.clear()
 	for item in data.get("poker_records", []):
 		poker_records.append(item as Dictionary)
-	_refresh_poker_slots()
+	# _refresh_poker_slots() 延迟到 _build_top_bar() 之后
 
 
 ## ============================================================

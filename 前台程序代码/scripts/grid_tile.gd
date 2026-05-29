@@ -27,8 +27,10 @@ func setup(icon: String, gname: String, fill: Color, border: Color) -> void:
 	name_text = gname
 	fill_color = fill
 	border_color = border
-	_icon_label.text = icon
-	_name_label.text = gname
+	if _icon_label:
+		_icon_label.text = icon
+	if _name_label:
+		_name_label.text = gname
 	queue_redraw()
 
 
@@ -46,7 +48,9 @@ func _draw() -> void:
 
 
 func set_label_positions(icon_y: float, name_y: float) -> void:
-	_icon_label.position = Vector2(0, icon_y)
-	_icon_label.size = Vector2(size.x, 30)
-	_name_label.position = Vector2(0, name_y)
-	_name_label.size = Vector2(size.x, 14)
+	if _icon_label:
+		_icon_label.position = Vector2(0, icon_y)
+		_icon_label.size = Vector2(size.x, 30)
+	if _name_label:
+		_name_label.position = Vector2(0, name_y)
+		_name_label.size = Vector2(size.x, 14)
