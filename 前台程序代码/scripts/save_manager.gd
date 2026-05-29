@@ -74,6 +74,12 @@ func create_character(slot: int, name: String) -> Dictionary:
 ## ============ 保存/加载 ============
 
 func save_game(slot: int, data: Dictionary) -> void:
+	# 合并已有数据，保留 created_at / last_online 等仅创建时写入的字段
+	var existing := _read_json(_slot_path(slot))
+	if not existing.is_empty():
+		for key in existing:
+			if not data.has(key):
+				data[key] = existing[key]
 	data["last_saved"] = int(Time.get_unix_time_from_system())
 	data["version"] = SAVE_VERSION
 	_write_json(_slot_path(slot), data)

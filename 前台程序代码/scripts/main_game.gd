@@ -191,7 +191,7 @@ func _build_top_bar() -> void:
 
 	var gold_lbl := Label.new()
 	gold_lbl.name = "GoldLabel"
-	gold_lbl.text = "0"
+	gold_lbl.text = str(player_gold)
 	gold_lbl.add_theme_font_size_override("font_size", 16)
 	gold_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
 	gold_lbl.position = Vector2(400, 42)
