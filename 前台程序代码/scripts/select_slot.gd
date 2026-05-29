@@ -162,20 +162,15 @@ func _refresh_slots() -> void:
 
 func _on_slot_clicked(slot: int) -> void:
 	var info: Dictionary = _sm().get_slot_info(slot)
-	print("[DEBUG] Slot ", slot, " clicked, empty=", info["empty"])
 	if info["empty"]:
 		_show_create_dialog(slot)
 		return
 
 	# 点击已创建槽位 → 直接进入游戏
 	var data: Dictionary = _sm().load_game(slot)
-	print("[DEBUG] load_game keys=", data.size(), " name=", data.get("character_name", "N/A"))
 	if not data.is_empty():
 		_active_slot = slot
-		print("[DEBUG] Starting game for slot ", slot)
 		_start_game(slot, data)
-	else:
-		print("[DEBUG] WARNING: data is empty, not starting")
 
 
 ## ============ 创建角色弹窗 ============

@@ -111,8 +111,9 @@ func _clear_cmd_file() -> void:
 func _get_slot_info(slot: int) -> Dictionary:
 	var sm := get_node_or_null("/root/SaveManager")
 	if sm:
-		return sm.get_slot_info(slot)
-	return {}
+		var info: Dictionary = sm.get_slot_info(slot)
+		return info
+	return { "empty": true, "slot": slot }  # 默认空槽
 
 func _get_root_control() -> Control:
 	for child in get_tree().root.get_children():
@@ -123,7 +124,7 @@ func _get_root_control() -> Control:
 
 func _exec_on(scene_name: String, method: String, args: Array) -> void:
 	var ctrl := _get_root_control()
-	if ctrl and ctrl.name.to_lower().begins_with(scene_name):
+	if ctrl and ctrl.name.to_lower().replace("_", "") == scene_name.replace("_", ""):
 		ctrl.callv(method, args)
 
 
@@ -133,7 +134,7 @@ func _find_node_by_path(root: Node, path: String) -> Node:
 	for p in parts:
 		current = current.get_node_or_null(p)
 		if not current:
-			break
+			return null
 	return current
 
 
@@ -220,7 +221,8 @@ func _simulate_hold(btn_path: String, seconds: float) -> void:
 	t.one_shot = true
 	t.wait_time = seconds
 	t.timeout.connect(func():
-		btn.emit_signal("button_up")
+		if is_instance_valid(btn):
+			btn.emit_signal("button_up")
 		t.queue_free()
 	)
 	add_child(t)
