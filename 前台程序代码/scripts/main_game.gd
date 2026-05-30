@@ -1096,17 +1096,19 @@ func _btn_style_mini(btn: Button, clr: Color) -> void:
 	btn.add_theme_stylebox_override("normal", n)
 	btn.add_theme_color_override("font_color", Color.WHITE)
 	btn.flat = true
-	var n := StyleBoxFlat.new()
+
+func _btn_style(btn: Button, clr: Color) -> void:
+	var n: StyleBoxFlat = StyleBoxFlat.new()
 	n.bg_color = clr
 	n.border_width_left = 2; n.border_width_right = 2
 	n.border_width_top = 2; n.border_width_bottom = 2
 	n.border_color = Color(0.5, 0.5, 0.6, 0.7)
 	n.set_corner_radius_all(6)
 	btn.add_theme_stylebox_override("normal", n)
-	var h := n.duplicate() as StyleBoxFlat
+	var h: StyleBoxFlat = n.duplicate() as StyleBoxFlat
 	h.bg_color = clr.lightened(0.15)
 	btn.add_theme_stylebox_override("hover", h)
-	var p := n.duplicate() as StyleBoxFlat
+	var p: StyleBoxFlat = n.duplicate() as StyleBoxFlat
 	p.bg_color = clr.darkened(0.15)
 	btn.add_theme_stylebox_override("pressed", p)
 	btn.add_theme_color_override("font_color", Color.WHITE)
