@@ -26,9 +26,9 @@ func equip(slot_name: String, item_id: int) -> bool:
 		return false
 	var expected_type: int = -1
 	match slot_name:
-		"weapon":    expected_type = ItemDBRef.WEAPON
-		"armor":     expected_type = ItemDBRef.ARMOR
-		"accessory": expected_type = ItemDBRef.ACCESSORY
+		"weapon":    expected_type = 1
+		"armor":     expected_type = 2
+		"accessory": expected_type = 3
 	if defn["type"] != expected_type:
 		return false
 	_slots[slot_name] = item_id
