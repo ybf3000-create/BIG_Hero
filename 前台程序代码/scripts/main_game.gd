@@ -57,10 +57,14 @@ const VISIBLE_AFTER: int  = 4
 const GridTileCls = preload("res://scripts/grid_tile.gd")
 const DiceRollerCls = preload("res://scripts/dice_roller.gd")
 const GridExecutorCls = preload("res://scripts/grid_executor.gd")
+const InventoryCls = preload("res://scripts/inventory.gd")
+const EquipmentCls = preload("res://scripts/equipment.gd")
 
-# 骰子 & 执行器
+# 子系统
 var dice: RefCounted
 var executor: RefCounted
+var inventory: RefCounted
+var equipment: RefCounted
 
 # 移动动画
 var _moving: bool = false
@@ -90,6 +94,8 @@ func _ready() -> void:
 	# 初始化子系统
 	dice = DiceRollerCls.new()
 	executor = GridExecutorCls.new()
+	inventory = InventoryCls.new()
+	equipment = EquipmentCls.new()
 
 	# 从选择界面传来的存档数据
 	if has_meta("save_slot") and has_meta("save_data"):
@@ -538,6 +544,8 @@ func _load_from_save_data(data: Dictionary) -> void:
 	poker_records.clear()
 	for item in data.get("poker_records", []):
 		poker_records.append(item as Dictionary)
+	inventory.from_dict(data.get("inventory", []))
+	equipment.from_dict(data.get("equipment", {}))
 	# _refresh_poker_slots() 延迟到 _build_top_bar() 之后
 
 
@@ -557,6 +565,8 @@ func _build_save_data() -> Dictionary:
 		"map_grids": map_grids,
 		"dice_history": last_dice_history,
 		"poker_records": poker_records,
+		"inventory": inventory.to_dict(),
+		"equipment": equipment.to_dict(),
 	}
 
 
@@ -883,13 +893,180 @@ func _show_dice_popup(roll: int, suit: String) -> void:
 
 
 ## ============ 按钮回调 ============
-func _on_bag_pressed()     -> void: print("[主界面] 打开背包")
+func _on_bag_pressed() -> void:
+	_show_inventory_panel()
 func _on_skill_pressed()   -> void: print("[主界面] 打开技能")
 func _on_log_pressed()     -> void: print("[主界面] 打开日志")
 func _on_settings_pressed()-> void:
 	_auto_save()
 	if get_tree():
 		get_tree().change_scene_to_file("res://scenes/select_slot.tscn")
+
+
+## ============ 背包 UI 面板 ============
+func _show_inventory_panel() -> void:
+	_auto_save()
+	var panel: Panel = Panel.new()
+	panel.name = "InventoryPanel"
+	panel.position = Vector2(140, 60)
+	panel.size = Vector2(1000, 550)
+	_panel_style(panel, Color(0.10, 0.10, 0.16))
+
+	# 标题
+	var title: Label = Label.new()
+	title.text = "🎒 背包  |  💰 " + str(player_gold) + " 金币"
+	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
+	title.position = Vector2(20, 10)
+	panel.add_child(title)
+
+	# 装备栏（左侧）
+	var equip_panel: Panel = Panel.new()
+	equip_panel.position = Vector2(16, 50)
+	equip_panel.size = Vector2(280, 420)
+	_panel_style(equip_panel, Color(0.08, 0.09, 0.13))
+	panel.add_child(equip_panel)
+
+	var equip_title: Label = Label.new()
+	equip_title.text = "装备栏"
+	equip_title.add_theme_font_size_override("font_size", 16)
+	equip_title.add_theme_color_override("font_color", Color(0.7, 0.85, 1.0))
+	equip_title.position = Vector2(10, 8)
+	equip_panel.add_child(equip_title)
+
+	var equip_slots: Array[Dictionary] = [
+		{ "name": "weapon",    "label": "武器", "y": 40 },
+		{ "name": "armor",     "label": "防具", "y": 130 },
+		{ "name": "accessory", "label": "饰品", "y": 220 },
+	]
+	for es in equip_slots:
+		var eq_lbl: Label = Label.new()
+		eq_lbl.text = es["label"]
+		eq_lbl.add_theme_font_size_override("font_size", 14)
+		eq_lbl.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
+		eq_lbl.position = Vector2(10, es["y"])
+		equip_panel.add_child(eq_lbl)
+
+		var slot_bg: ColorRect = ColorRect.new()
+		slot_bg.name = "EqSlot_" + es["name"]
+		slot_bg.position = Vector2(50, es["y"] + 20)
+		slot_bg.size = Vector2(210, 60)
+		slot_bg.color = Color(0.14, 0.15, 0.22)
+		equip_panel.add_child(slot_bg)
+
+		var item_id: int = equipment.get_slot_item(es["name"])
+		var slot_lbl: Label = Label.new()
+		slot_lbl.name = "EqText_" + es["name"]
+		if item_id > 0:
+			slot_lbl.text = ItemDB.get_icon(item_id) + " " + ItemDB.get_name(item_id)
+			slot_lbl.add_theme_color_override("font_color", Color(1.0, 0.9, 0.5))
+		else:
+			slot_lbl.text = "[ 空 ]"
+			slot_lbl.add_theme_color_override("font_color", Color(0.3, 0.3, 0.4))
+		slot_lbl.add_theme_font_size_override("font_size", 14)
+		slot_lbl.position = Vector2(58, es["y"] + 36)
+		equip_panel.add_child(slot_lbl)
+
+	# 道具列表（右侧）
+	var item_panel: Panel = Panel.new()
+	item_panel.position = Vector2(310, 50)
+	item_panel.size = Vector2(674, 420)
+	_panel_style(item_panel, Color(0.08, 0.09, 0.13))
+	panel.add_child(item_panel)
+
+	var cnt: int = inventory.get_slot_count()
+	var item_title: Label = Label.new()
+	item_title.text = "道具 (" + str(cnt) + "/30)"
+	item_title.add_theme_font_size_override("font_size", 14)
+	item_title.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
+	item_title.position = Vector2(10, 8)
+	item_panel.add_child(item_title)
+
+	for i in range(cnt):
+		var slot: Dictionary = inventory.get_slot(i)
+		var defn: Dictionary = ItemDB.get_item(slot["item_id"])
+		var row_y: float = 34.0 + i * 28.0
+
+		var icon_lbl: Label = Label.new()
+		icon_lbl.text = defn.get("icon", "?")
+		icon_lbl.add_theme_font_size_override("font_size", 16)
+		icon_lbl.position = Vector2(10, row_y)
+		item_panel.add_child(icon_lbl)
+
+		var name_lbl: Label = Label.new()
+		name_lbl.text = defn.get("name", "???") + "  ×" + str(slot["count"])
+		name_lbl.add_theme_font_size_override("font_size", 13)
+		name_lbl.add_theme_color_override("font_color", Color(0.85, 0.85, 0.85))
+		name_lbl.position = Vector2(40, row_y)
+		item_panel.add_child(name_lbl)
+
+		var type_lbl: Label = Label.new()
+		var tname: String = "消耗"
+		match defn.get("type", 0):
+			ItemDB.WEAPON:    tname = "武器"
+			ItemDB.ARMOR:     tname = "防具"
+			ItemDB.ACCESSORY: tname = "饰品"
+			ItemDB.MATERIAL:  tname = "材料"
+		type_lbl.text = "[" + tname + "]"
+		type_lbl.add_theme_font_size_override("font_size", 11)
+		type_lbl.add_theme_color_override("font_color", Color(0.4, 0.5, 0.7))
+		type_lbl.position = Vector2(200, row_y + 2)
+		item_panel.add_child(type_lbl)
+
+		# 使用/装备按钮
+		var btn: Button = Button.new()
+		var is_equip: bool = (defn["type"] == ItemDB.WEAPON or defn["type"] == ItemDB.ARMOR or defn["type"] == ItemDB.ACCESSORY)
+		btn.text = "装备" if is_equip else "使用"
+		btn.position = Vector2(260, row_y - 2)
+		btn.size = Vector2(50, 22)
+		btn.add_theme_font_size_override("font_size", 11)
+		_btn_style_mini(btn, Color(0.18, 0.25, 0.40))
+		var idx: int = i
+		btn.pressed.connect(func():
+			_on_item_action(idx)
+			panel.queue_free()
+			_show_inventory_panel()  # 刷新面板
+		)
+		item_panel.add_child(btn)
+
+	# 关闭按钮
+	var close_btn: Button = Button.new()
+	close_btn.text = "✕ 关闭"
+	close_btn.position = Vector2(460, 490)
+	close_btn.size = Vector2(80, 30)
+	_btn_style_mini(close_btn, Color(0.25, 0.15, 0.15))
+	close_btn.pressed.connect(panel.queue_free)
+	panel.add_child(close_btn)
+
+	add_child(panel)
+
+
+func _on_item_action(slot_idx: int) -> void:
+	var slot: Dictionary = inventory.get_slot(slot_idx)
+	if slot.is_empty():
+		return
+	var defn: Dictionary = ItemDB.get_item(slot["item_id"])
+	var itype: int = defn.get("type", 0)
+
+	if itype == ItemDB.WEAPON or itype == ItemDB.ARMOR or itype == ItemDB.ACCESSORY:
+		# 装备
+		var slot_name: String = ""
+		match itype:
+			ItemDB.WEAPON:    slot_name = "weapon"
+			ItemDB.ARMOR:     slot_name = "armor"
+			ItemDB.ACCESSORY: slot_name = "accessory"
+		var old_id: int = equipment.unequip(slot_name)
+		if old_id > 0:
+			inventory.add_item(old_id, 1)
+		equipment.equip(slot_name, slot["item_id"])
+		inventory.remove_item(slot_idx, 1)
+	else:
+		# 消耗品
+		var stats: Dictionary = defn.get("stats", {})
+		player_gold += stats.get("gold_bonus", 0)
+		player_exp += stats.get("exp_bonus", 0)
+		_refresh_top_bar()
+		inventory.remove_item(slot_idx, 1)
 
 
 ## ============ 样式工具 ============
@@ -912,7 +1089,13 @@ func _bar_style(node: ProgressBar, clr: Color) -> void:
 	fill.bg_color = clr
 	node.add_theme_stylebox_override("fill", fill)
 
-func _btn_style(btn: Button, clr: Color) -> void:
+func _btn_style_mini(btn: Button, clr: Color) -> void:
+	var n: StyleBoxFlat = StyleBoxFlat.new()
+	n.bg_color = clr
+	n.set_corner_radius_all(3)
+	btn.add_theme_stylebox_override("normal", n)
+	btn.add_theme_color_override("font_color", Color.WHITE)
+	btn.flat = true
 	var n := StyleBoxFlat.new()
 	n.bg_color = clr
 	n.border_width_left = 2; n.border_width_right = 2
