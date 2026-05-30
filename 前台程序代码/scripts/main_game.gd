@@ -68,12 +68,11 @@ var _move_step: int = 0
 var _move_total: int = 0
 var _move_timer: float = 0.0
 
-# 透视梯形格子尺寸（底宽 × 高）
-const TILE_W: float = 170.0       # 底部宽度
-const TILE_H: float = 125.0       # 高度
+# 平行四边形地块尺寸（顶边宽 × 高，斜边由 GridTile.SHEAR 控制）
+const TILE_W: float = 160.0       # 顶边水平宽度
+const TILE_H: float = 80.0        # 高度
+const TILE_SHEAR: float = 45.0    # 斜边偏移（与 GridTile.SHEAR 一致）
 const TILE_COUNT: int = 7
-# 透视缩放：[最远, 远, 近, 当前, 近, 远, 最远]
-const PERSPECTIVE_SCALES: Array[float] = [0.60, 0.75, 0.88, 1.0, 0.88, 0.75, 0.60]
 # TILE_Y 在 _build_map_area 中动态计算
 
 
@@ -337,8 +336,8 @@ func _build_map_area() -> void:
 	bg_hint.position = Vector2(540, 120)
 	area.add_child(bg_hint)
 
-	# -- 透视梯形地图格子（底平，左右相接，透视缩放） --
-	var total_span := TILE_COUNT * TILE_W  # 底边相连无间隙
+	# -- 平行四边形地块（底边水平、斜边连续拼接，等大） --
+	var total_span := TILE_COUNT * TILE_W  # 每个地块顶边宽累加
 	var start_x := (1280.0 - total_span) / 2.0
 	var tile_y := (area.size.y - TILE_H) / 2.0
 	var slot_names := ["PrevGrid2", "PrevGrid1", "CurrentGrid", "NextGrid1", "NextGrid2", "NextGrid3", "NextGrid4"]
@@ -346,14 +345,9 @@ func _build_map_area() -> void:
 	for i in range(TILE_COUNT):
 		var tile: Control = GridTileCls.new()
 		tile.name = slot_names[i]
-		var s: float = PERSPECTIVE_SCALES[i]
-		var tw: float = TILE_W * s
-		var th: float = TILE_H * s
-		# 缩放后保持底部中心对齐
-		var offset_x: float = (TILE_W - tw) / 2.0
-		var offset_y: float = TILE_H - th
-		tile.position = Vector2(start_x + i * TILE_W + offset_x, tile_y + offset_y)
-		tile.size = Vector2(tw, th)
+		# x: 地块N的右下角=地块N+1的左下角（斜边公用）
+		tile.position = Vector2(start_x + i * TILE_W, tile_y)
+		tile.size = Vector2(TILE_W + TILE_SHEAR, TILE_H)  # Control 容纳斜边
 		tile.set_label_positions(0, 0)
 		area.add_child(tile)
 
@@ -383,7 +377,7 @@ func _build_map_area() -> void:
 		fallback.text = "🚶"
 		fallback.add_theme_font_size_override("font_size", 64)
 		# 居中当前格
-		var fcx: float = start_x + 3 * TILE_W + TILE_W / 2.0
+		var fcx: float = start_x + 3 * TILE_W + TILE_W / 2.0 + TILE_SHEAR / 2.0
 		fallback.position = Vector2(fcx - 32, grid_tile_y - 40)
 		area.add_child(fallback)
 
@@ -419,8 +413,8 @@ func _position_hero_on_tile(hero: TextureRect, tile_index: int, p_area: Control 
 	var total_span := TILE_COUNT * TILE_W
 	var start_x := (1280.0 - total_span) / 2.0
 	var tile_y := (area.size.y - TILE_H) / 2.0
-	# 当前格（tile_index=3）为 100% 缩放
-	var center_x: float = start_x + tile_index * TILE_W + TILE_W / 2.0
+	# 平行四边形几何中心
+	var center_x: float = start_x + tile_index * TILE_W + TILE_W / 2.0 + TILE_SHEAR / 2.0
 	var center_y: float = tile_y + TILE_H / 2.0
 	hero.position = Vector2(center_x - hero.size.x / 2.0, center_y - hero.size.y + 10)
 
