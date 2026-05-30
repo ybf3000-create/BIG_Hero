@@ -67,12 +67,13 @@ var _moving: bool = false
 var _move_step: int = 0
 var _move_total: int = 0
 var _move_timer: float = 0.0
+var _bounce_offset: float = 0.0  # 主角跳跃偏移
 
 # 平行四边形地块尺寸（顶边宽 × 高，斜边由 GridTile.SHEAR 控制）
 const TILE_W: float = 160.0       # 上下边水平宽度
 const TILE_H: float = 80.0        # 平行四边形高度（不含标签行）
 const TILE_SHEAR: float = 45.0    # 斜边偏移（与 GridTile.SHEAR 一致）
-const LABEL_ROW: float = 20.0     # 标签行高度（与 GridTile.LABEL_H 一致）
+const LABEL_ROW: float = 30.0     # 标签行高度（与 GridTile.LABEL_H 一致）
 const TILE_COUNT: int = 7
 # TILE_Y 在 _build_map_area 中动态计算
 
@@ -337,11 +338,12 @@ func _build_map_area() -> void:
 	bg_hint.position = Vector2(540, 120)
 	area.add_child(bg_hint)
 
-	# -- 平行四边形地块（底边水平、斜边连续拼接，等大） --
-	var total_span := TILE_COUNT * TILE_W  # 每个地块顶边宽累加
+	# -- 平行四边形地块（下移到靠近底部，不占底部UI） --
+	var total_span := TILE_COUNT * TILE_W
 	var start_x := (1280.0 - total_span) / 2.0
-	var tile_y := (area.size.y - TILE_H) / 2.0
+	var tile_y := area.size.y - TILE_H - LABEL_ROW - 12  # 靠下，留 12px 间距
 	var slot_names := ["PrevGrid2", "PrevGrid1", "CurrentGrid", "NextGrid1", "NextGrid2", "NextGrid3", "NextGrid4"]
+	var grid_tile_y := tile_y  # 主角定位用
 
 	for i in range(TILE_COUNT):
 		var tile: Control = GridTileCls.new()
@@ -353,7 +355,6 @@ func _build_map_area() -> void:
 		area.add_child(tile)
 
 	# -- 主角图像（居中当前格，色键透明背景） --
-	var grid_tile_y := (area.size.y - TILE_H) / 2.0
 	var hero_tex := load("res://assets/主角.bmp")
 	if hero_tex:
 		var hero := TextureRect.new()
@@ -397,10 +398,19 @@ func _build_map_area() -> void:
 	var auto_check := CheckBox.new()
 	auto_check.name = "AutoPlayCheck"
 	auto_check.text = "自动挂机"
-	auto_check.add_theme_font_size_override("font_size", 14)
-	auto_check.add_theme_color_override("font_color", Color(0.7, 0.9, 0.7))
+	auto_check.add_theme_font_size_override("font_size", 15)
+	auto_check.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0))  # 白色清晰
+	auto_check.add_theme_color_override("font_pressed_color", Color(0.3, 1.0, 0.5))
 	auto_check.button_pressed = false
-	auto_check.position = Vector2(1120, 10)
+	auto_check.position = Vector2(1115, 6)
+
+	# 勾选框背景条，提升可见性
+	var chk_bg := ColorRect.new()
+	chk_bg.name = "AutoCheckBg"
+	chk_bg.color = Color(0.08, 0.12, 0.20, 0.85)
+	chk_bg.position = Vector2(1105, 2)
+	chk_bg.size = Vector2(165, 26)
+	area.add_child(chk_bg)
 	area.add_child(auto_check)
 
 	add_child(area)
@@ -417,7 +427,7 @@ func _position_hero_on_tile(hero: TextureRect, tile_index: int, p_area: Control 
 	# 平行四边形几何中心
 	var center_x: float = start_x + tile_index * TILE_W + TILE_W / 2.0 + TILE_SHEAR / 2.0
 	var center_y: float = tile_y + TILE_H / 2.0
-	hero.position = Vector2(center_x - hero.size.x / 2.0, center_y - hero.size.y + 10)
+	hero.position = Vector2(center_x - hero.size.x / 2.0, center_y - hero.size.y + 10 + _bounce_offset)
 
 
 ## ============================================================
@@ -588,13 +598,16 @@ func _on_dice_roll() -> void:
 
 ## 每帧更新移动动画
 func _process(delta: float) -> void:
-	if not _moving:
-		return
+	if _moving:
+		_move_timer += delta
+		# 正弦弹跳：每个步进周期内产生一次跳跃
+		var phase: float = _move_timer / 0.35  # 0~1
+		_bounce_offset = -abs(sin(phase * PI)) * 20.0  # 向上弹 20px
 
-	_move_timer += delta
-	if _move_timer >= 0.35:  # 每步 0.35 秒
-		_move_timer = 0.0
-		_move_step += 1
+		if _move_timer >= 0.35:
+			_move_timer = 0.0
+			_move_step += 1
+			_bounce_offset = 0.0
 
 		# 移动一步
 		var prev_idx := player_grid_index

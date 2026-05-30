@@ -13,20 +13,20 @@ var _name_label: Label
 
 const SHEAR: float = 45.0       # 水平偏移
 const BORDER_W: float = 2.0
-const LABEL_H: float = 20.0     # 标签行高度
+const LABEL_H: float = 30.0     # 标签行高度（配合放大字体）
 
 
 func _ready() -> void:
 	_icon_label = Label.new()
 	_icon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_icon_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_icon_label.add_theme_font_size_override("font_size", 16)
+	_icon_label.add_theme_font_size_override("font_size", 32)
 	add_child(_icon_label)
 
 	_name_label = Label.new()
 	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_name_label.add_theme_font_size_override("font_size", 10)
+	_name_label.add_theme_font_size_override("font_size", 20)
 	_name_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.75))
 	add_child(_name_label)
 
@@ -71,8 +71,8 @@ func set_label_positions(_x: float, _y: float) -> void:
 func _resize_labels() -> void:
 	var para_h := size.y - LABEL_H
 	if _icon_label:
-		_icon_label.position = Vector2(SHEAR + 4, para_h)
-		_icon_label.size = Vector2(22, LABEL_H)
+		_icon_label.position = Vector2(SHEAR + 4, para_h + 2)
+		_icon_label.size = Vector2(36, LABEL_H - 4)
 	if _name_label:
-		_name_label.position = Vector2(SHEAR + 28, para_h)
-		_name_label.size = Vector2(size.x - SHEAR - 30, LABEL_H)
+		_name_label.position = Vector2(SHEAR + 42, para_h + 2)
+		_name_label.size = Vector2(size.x - SHEAR - 44, LABEL_H - 4)
