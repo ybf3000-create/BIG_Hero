@@ -68,7 +68,11 @@ var _move_step: int = 0
 var _move_total: int = 0
 var _move_timer: float = 0.0
 var _bounce_offset: float = 0.0     # 主角跳跃偏移
-var _scroll_offset: float = 0.0     # 地块整体左滑偏移
+var _scroll_offset: float = 0.0     # 地块左滑偏移
+
+const STEP_PAUSE: float = 0.3       # 每步停顿
+const STEP_SLIDE: float = 0.25      # 滑动时长
+const STEP_TOTAL: float = STEP_PAUSE + STEP_SLIDE  # 单步总时长
 
 # 平行四边形地块尺寸（顶边宽 × 高，斜边由 GridTile.SHEAR 控制）
 const TILE_W: float = 160.0       # 上下边水平宽度
@@ -394,37 +398,24 @@ func _build_map_area() -> void:
 	pos_lbl.size = Vector2(1280, 14)
 	area.add_child(pos_lbl)
 
-	# -- 右上角：自动挂机勾选 --
+	# -- 右上角：自动挂机勾选（勾选框图标白色描边） --
 	var auto_check := CheckBox.new()
 	auto_check.name = "AutoPlayCheck"
 	auto_check.text = "自动挂机"
 	auto_check.add_theme_font_size_override("font_size", 15)
-	auto_check.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0))  # 白色清晰
+	auto_check.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0))
 	auto_check.add_theme_color_override("font_pressed_color", Color(0.3, 1.0, 0.5))
 	auto_check.button_pressed = false
 	auto_check.position = Vector2(1115, 6)
 
-	# 勾选框背景条+白色描边
-	var chk_bg := ColorRect.new()
-	chk_bg.name = "AutoCheckBg"
-	chk_bg.color = Color(0.08, 0.12, 0.20, 0.85)
-	chk_bg.position = Vector2(1105, 2)
-	chk_bg.size = Vector2(165, 26)
-
-	# 白色描边（使用 StyleBox 给 ColorRect）
-	var chk_style := StyleBoxFlat.new()
-	chk_style.border_width_left = 1; chk_style.border_width_right = 1
-	chk_style.border_width_top = 1; chk_style.border_width_bottom = 1
-	chk_style.border_color = Color.WHITE
-	chk_style.bg_color = chk_bg.color
-	chk_style.set_corner_radius_all(4)
-	# ColorRect 不支持 theme，改用 Panel
-	var chk_panel := Panel.new()
-	chk_panel.name = "AutoCheckPanel"
-	chk_panel.position = Vector2(1105, 2)
-	chk_panel.size = Vector2(165, 26)
-	chk_panel.add_theme_stylebox_override("panel", chk_style)
-	area.add_child(chk_panel)
+	# 勾选框图标白色边框
+	var chk_icon := StyleBoxFlat.new()
+	chk_icon.bg_color = Color(0.08, 0.12, 0.20, 0.85)
+	chk_icon.border_width_left = 1; chk_icon.border_width_right = 1
+	chk_icon.border_width_top = 1; chk_icon.border_width_bottom = 1
+	chk_icon.border_color = Color(1.0, 1.0, 1.0, 0.8)  # 半透白边
+	chk_icon.set_corner_radius_all(3)
+	auto_check.add_theme_stylebox_override("normal", chk_icon)
 
 	area.add_child(auto_check)
 
@@ -605,37 +596,48 @@ func _on_dice_roll() -> void:
 	if hist_lbl:
 		hist_lbl.text = hist_text
 
-	# 启动地块左滑 + 角色跳跃动画
+	# 启动步进移动
 	_move_step = 0
 	_move_total = last_dice_roll
+	_move_timer = 0.0
 	_scroll_offset = 0.0
+	_bounce_offset = 0.0
 	_moving = true
 
 
-## 每帧：地块平滑左滑 + 主角跳跃晃
+## 步进移动：每步先停顿 0.3s，再滑动 0.25s
 func _process(delta: float) -> void:
 	if not _moving:
 		return
 
 	_move_timer += delta
-	# 正弦弹跳：每个步进周期内向上弹 22px
-	var phase: float = _move_timer / 0.35
-	_bounce_offset = -abs(sin(phase * PI)) * 22.0
 
-	# 地块平滑左滑
-	var target_offset: float = -_move_step * TILE_W
-	var next_target: float = -(_move_step + 1) * TILE_W
-	_scroll_offset = lerp(target_offset, next_target, phase)
+	# 当前步的总进度 0～STEP_TOTAL
+	var step_phase: float = _move_timer / STEP_TOTAL
 
-	# 每步完成时触发
-	if _move_timer >= 0.35:
-		_move_timer = 0.0
-		_move_step += 1
+	# 滑动发生在 phase > (STEP_PAUSE / STEP_TOTAL) 的部分
+	var slide_start: float = STEP_PAUSE / STEP_TOTAL
+	var slide_phase: float = 0.0
+	if step_phase > slide_start:
+		slide_phase = (step_phase - slide_start) / (1.0 - slide_start)
+		_scroll_offset = -_move_step * TILE_W - TILE_W * slide_phase
+		_bounce_offset = -abs(sin(slide_phase * PI)) * 22.0
+	else:
+		_scroll_offset = -_move_step * TILE_W
 		_bounce_offset = 0.0
 
-		# 检查过起点
-		var prev_idx := player_grid_index
+	_slide_grids()
+
+	# 单步完成
+	if _move_timer >= STEP_TOTAL:
+		_move_timer = 0.0
+		_move_step += 1
+		_scroll_offset = -_move_step * TILE_W
+		_bounce_offset = 0.0
+
+		# 更新格子索引
 		player_grid_index = (player_grid_index + 1) % map_total_grids
+		var prev_idx := (player_grid_index - 1 + map_total_grids) % map_total_grids
 		if prev_idx > player_grid_index:
 			player_gold += 50
 			var rl: Label = $TopBar/DiceRewardLabel as Label
@@ -643,26 +645,25 @@ func _process(delta: float) -> void:
 				rl.text = "🎲 过起点 +50金!"
 			_refresh_top_bar()
 
-		# 步完成 → 刷新格子内容
 		_refresh_grid_display()
+		_slide_grids()
 
+		# 全部完成
 		if _move_step >= _move_total:
 			_moving = false
-			_bounce_offset = 0.0
 			_scroll_offset = 0.0
-			_slide_grids()  # 地块归位
+			_bounce_offset = 0.0
+			_move_step = 0
+			_move_total = 0
+			_slide_grids()
 			_on_move_complete()
-			return
-		else:
-			_scroll_offset = -_move_step * TILE_W  # 复位起点
-
-	# 每帧刷新地块位置（应用 _scroll_offset）
-	_slide_grids()
 
 
 ## 每帧更新地块位置（应用滑动偏移）
 func _slide_grids() -> void:
-	var area := $MapArea
+	var area := get_node_or_null("MapArea")
+	if not area:
+		return
 	var total_span := TILE_COUNT * TILE_W
 	var start_x := (1280.0 - total_span) / 2.0
 	var slot_names := ["PrevGrid2", "PrevGrid1", "CurrentGrid", "NextGrid1", "NextGrid2", "NextGrid3", "NextGrid4"]
@@ -795,7 +796,9 @@ func _refresh_top_bar() -> void:
 
 
 func _refresh_grid_display() -> void:
-	var area := $MapArea
+	var area := get_node_or_null("MapArea")
+	if not area:
+		return
 	var idx := player_grid_index
 	var offsets := [-2, -1, 0, 1, 2, 3, 4]
 	var slot_names := ["PrevGrid2", "PrevGrid1", "CurrentGrid", "NextGrid1", "NextGrid2", "NextGrid3", "NextGrid4"]
