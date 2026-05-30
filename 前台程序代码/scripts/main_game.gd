@@ -664,6 +664,14 @@ func _slide_grids() -> void:
 		if tile:
 			tile.position.x = start_x + i * TILE_W + _scroll_offset
 
+	# 主角弹跳：基于基准位置 + 当前弹跳偏移
+	var hero: TextureRect = area.get_node_or_null("HeroOnMap") as TextureRect
+	if hero:
+		var tile_y := area.size.y - TILE_H - 12
+		var cx: float = start_x + 3 * TILE_W + TILE_W / 2.0 + TILE_SHEAR / 2.0
+		var cy: float = tile_y + TILE_H / 2.0
+		hero.position = Vector2(cx - hero.size.x / 2.0, cy - hero.size.y + 10 + _bounce_offset)
+
 
 func _on_move_complete() -> void:
 	# 使用 GridExecutor 触发当前位置的格子效果
