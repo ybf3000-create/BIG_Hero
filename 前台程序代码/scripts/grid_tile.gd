@@ -1,6 +1,7 @@
 class_name GridTile
 extends Control
-## 平行四边形地块 — 上下边水平、左右边倾斜，等大连续拼接，2D 立体透视
+## 平行四边形地块 — 上边靠右（透视方向），等大连续拼接，2D 立体透视
+## 图标+名称在平行四边形下方横排
 
 var fill_color: Color = Color.GRAY
 var border_color: Color = Color(0.5, 0.5, 0.6, 0.7)
@@ -10,21 +11,23 @@ var name_text: String = ""
 var _icon_label: Label
 var _name_label: Label
 
-const SHEAR: float = 45.0   # 水平偏移量（越大越斜，透视越强）
+const SHEAR: float = 45.0       # 水平偏移
 const BORDER_W: float = 2.0
+const LABEL_H: float = 20.0     # 标签行高度
 
 
 func _ready() -> void:
 	_icon_label = Label.new()
 	_icon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_icon_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_icon_label.add_theme_font_size_override("font_size", 28)
+	_icon_label.add_theme_font_size_override("font_size", 16)
 	add_child(_icon_label)
 
 	_name_label = Label.new()
-	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_name_label.add_theme_font_size_override("font_size", 10)
+	_name_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.75))
 	add_child(_name_label)
 
 	_resize_labels()
@@ -43,16 +46,16 @@ func setup(icon: String, gname: String, fill: Color, border: Color) -> void:
 
 
 func _draw() -> void:
-	var w := size.x - SHEAR  # 顶部宽度
-	var h := size.y
+	var para_h := size.y - LABEL_H  # 平行四边形高度
+	var w := size.x - SHEAR         # 上下边水平宽度
 	var s := SHEAR
 
-	# 平行四边形：顶边水平(0,0)→(w,0)，底边水平(s,h)→(w+s,h)
+	# 上边靠右：(s,0)→(w+s,0)，下边靠左：(0,para_h)→(w,para_h)
 	var points := PackedVector2Array([
-		Vector2(0, 0),          # 左上
-		Vector2(w, 0),          # 右上
-		Vector2(w + s, h),      # 右下
-		Vector2(s, h),          # 左下
+		Vector2(s, 0),              # 左上
+		Vector2(w + s, 0),          # 右上
+		Vector2(w, para_h),         # 右下
+		Vector2(0, para_h),         # 左下
 	])
 
 	draw_colored_polygon(points, fill_color)
@@ -66,10 +69,10 @@ func set_label_positions(_x: float, _y: float) -> void:
 
 
 func _resize_labels() -> void:
-	var h := size.y
+	var para_h := size.y - LABEL_H
 	if _icon_label:
-		_icon_label.position = Vector2(10, h * 0.05)
-		_icon_label.size = Vector2(size.x - 20, h * 0.55)
+		_icon_label.position = Vector2(SHEAR + 4, para_h)
+		_icon_label.size = Vector2(22, LABEL_H)
 	if _name_label:
-		_name_label.position = Vector2(10, h * 0.55)
-		_name_label.size = Vector2(size.x - 20, h * 0.40)
+		_name_label.position = Vector2(SHEAR + 28, para_h)
+		_name_label.size = Vector2(size.x - SHEAR - 30, LABEL_H)

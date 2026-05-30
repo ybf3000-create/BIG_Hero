@@ -69,9 +69,10 @@ var _move_total: int = 0
 var _move_timer: float = 0.0
 
 # 平行四边形地块尺寸（顶边宽 × 高，斜边由 GridTile.SHEAR 控制）
-const TILE_W: float = 160.0       # 顶边水平宽度
-const TILE_H: float = 80.0        # 高度
+const TILE_W: float = 160.0       # 上下边水平宽度
+const TILE_H: float = 80.0        # 平行四边形高度（不含标签行）
 const TILE_SHEAR: float = 45.0    # 斜边偏移（与 GridTile.SHEAR 一致）
+const LABEL_ROW: float = 20.0     # 标签行高度（与 GridTile.LABEL_H 一致）
 const TILE_COUNT: int = 7
 # TILE_Y 在 _build_map_area 中动态计算
 
@@ -347,7 +348,7 @@ func _build_map_area() -> void:
 		tile.name = slot_names[i]
 		# x: 地块N的右下角=地块N+1的左下角（斜边公用）
 		tile.position = Vector2(start_x + i * TILE_W, tile_y)
-		tile.size = Vector2(TILE_W + TILE_SHEAR, TILE_H)  # Control 容纳斜边
+		tile.size = Vector2(TILE_W + TILE_SHEAR, TILE_H + LABEL_ROW)  # 含标签行
 		tile.set_label_positions(0, 0)
 		area.add_child(tile)
 
