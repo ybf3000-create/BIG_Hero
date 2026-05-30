@@ -67,13 +67,13 @@ var _moving: bool = false
 var _move_step: int = 0
 var _move_total: int = 0
 var _move_timer: float = 0.0
-var _bounce_offset: float = 0.0  # 主角跳跃偏移
+var _bounce_offset: float = 0.0     # 主角跳跃偏移
+var _scroll_offset: float = 0.0     # 地块整体左滑偏移
 
 # 平行四边形地块尺寸（顶边宽 × 高，斜边由 GridTile.SHEAR 控制）
 const TILE_W: float = 160.0       # 上下边水平宽度
-const TILE_H: float = 80.0        # 平行四边形高度（不含标签行）
+const TILE_H: float = 90.0        # 平行四边形高度（标签内置）
 const TILE_SHEAR: float = 45.0    # 斜边偏移（与 GridTile.SHEAR 一致）
-const LABEL_ROW: float = 30.0     # 标签行高度（与 GridTile.LABEL_H 一致）
 const TILE_COUNT: int = 7
 # TILE_Y 在 _build_map_area 中动态计算
 
@@ -341,7 +341,7 @@ func _build_map_area() -> void:
 	# -- 平行四边形地块（下移到靠近底部，不占底部UI） --
 	var total_span := TILE_COUNT * TILE_W
 	var start_x := (1280.0 - total_span) / 2.0
-	var tile_y := area.size.y - TILE_H - LABEL_ROW - 12  # 靠下，留 12px 间距
+	var tile_y := area.size.y - TILE_H - 12  # 靠下，留 12px 间距
 	var slot_names := ["PrevGrid2", "PrevGrid1", "CurrentGrid", "NextGrid1", "NextGrid2", "NextGrid3", "NextGrid4"]
 	var grid_tile_y := tile_y  # 主角定位用
 
@@ -350,7 +350,7 @@ func _build_map_area() -> void:
 		tile.name = slot_names[i]
 		# x: 地块N的右下角=地块N+1的左下角（斜边公用）
 		tile.position = Vector2(start_x + i * TILE_W, tile_y)
-		tile.size = Vector2(TILE_W + TILE_SHEAR, TILE_H + LABEL_ROW)  # 含标签行
+		tile.size = Vector2(TILE_W + TILE_SHEAR, TILE_H)  # 不含标签行
 		tile.set_label_positions(0, 0)
 		area.add_child(tile)
 
@@ -380,7 +380,7 @@ func _build_map_area() -> void:
 		fallback.add_theme_font_size_override("font_size", 64)
 		# 居中当前格
 		var fcx: float = start_x + 3 * TILE_W + TILE_W / 2.0 + TILE_SHEAR / 2.0
-		fallback.position = Vector2(fcx - 32, grid_tile_y - 40)
+		fallback.position = Vector2(fcx - 32, grid_tile_y - 50)
 		area.add_child(fallback)
 
 	# -- 位置计数 --
@@ -390,7 +390,7 @@ func _build_map_area() -> void:
 	pos_lbl.add_theme_font_size_override("font_size", 10)
 	pos_lbl.add_theme_color_override("font_color", Color(0.35, 0.35, 0.4))
 	pos_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	pos_lbl.position = Vector2(0, grid_tile_y + TILE_H + 10)
+	pos_lbl.position = Vector2(0, grid_tile_y + TILE_H + 4)
 	pos_lbl.size = Vector2(1280, 14)
 	area.add_child(pos_lbl)
 
@@ -404,13 +404,28 @@ func _build_map_area() -> void:
 	auto_check.button_pressed = false
 	auto_check.position = Vector2(1115, 6)
 
-	# 勾选框背景条，提升可见性
+	# 勾选框背景条+白色描边
 	var chk_bg := ColorRect.new()
 	chk_bg.name = "AutoCheckBg"
 	chk_bg.color = Color(0.08, 0.12, 0.20, 0.85)
 	chk_bg.position = Vector2(1105, 2)
 	chk_bg.size = Vector2(165, 26)
-	area.add_child(chk_bg)
+
+	# 白色描边（使用 StyleBox 给 ColorRect）
+	var chk_style := StyleBoxFlat.new()
+	chk_style.border_width_left = 1; chk_style.border_width_right = 1
+	chk_style.border_width_top = 1; chk_style.border_width_bottom = 1
+	chk_style.border_color = Color.WHITE
+	chk_style.bg_color = chk_bg.color
+	chk_style.set_corner_radius_all(4)
+	# ColorRect 不支持 theme，改用 Panel
+	var chk_panel := Panel.new()
+	chk_panel.name = "AutoCheckPanel"
+	chk_panel.position = Vector2(1105, 2)
+	chk_panel.size = Vector2(165, 26)
+	chk_panel.add_theme_stylebox_override("panel", chk_style)
+	area.add_child(chk_panel)
+
 	area.add_child(auto_check)
 
 	add_child(area)
@@ -423,7 +438,7 @@ func _position_hero_on_tile(hero: TextureRect, tile_index: int, p_area: Control 
 		return
 	var total_span := TILE_COUNT * TILE_W
 	var start_x := (1280.0 - total_span) / 2.0
-	var tile_y := (area.size.y - TILE_H) / 2.0
+	var tile_y := area.size.y - TILE_H - 12  # 与 _build_map_area 一致
 	# 平行四边形几何中心
 	var center_x: float = start_x + tile_index * TILE_W + TILE_W / 2.0 + TILE_SHEAR / 2.0
 	var center_y: float = tile_y + TILE_H / 2.0
@@ -590,44 +605,71 @@ func _on_dice_roll() -> void:
 	if hist_lbl:
 		hist_lbl.text = hist_text
 
-	# 启动步进移动动画
+	# 启动地块左滑 + 角色跳跃动画
 	_move_step = 0
 	_move_total = last_dice_roll
+	_scroll_offset = 0.0
 	_moving = true
 
 
-## 每帧更新移动动画
+## 每帧：地块平滑左滑 + 主角跳跃晃
 func _process(delta: float) -> void:
-	if _moving:
-		_move_timer += delta
-		# 正弦弹跳：每个步进周期内产生一次跳跃
-		var phase: float = _move_timer / 0.35  # 0~1
-		_bounce_offset = -abs(sin(phase * PI)) * 20.0  # 向上弹 20px
+	if not _moving:
+		return
 
-		if _move_timer >= 0.35:
-			_move_timer = 0.0
-			_move_step += 1
-			_bounce_offset = 0.0
+	_move_timer += delta
+	# 正弦弹跳：每个步进周期内向上弹 22px
+	var phase: float = _move_timer / 0.35
+	_bounce_offset = -abs(sin(phase * PI)) * 22.0
 
-		# 移动一步
+	# 地块平滑左滑
+	var target_offset: float = -_move_step * TILE_W
+	var next_target: float = -(_move_step + 1) * TILE_W
+	_scroll_offset = lerp(target_offset, next_target, phase)
+
+	# 每步完成时触发
+	if _move_timer >= 0.35:
+		_move_timer = 0.0
+		_move_step += 1
+		_bounce_offset = 0.0
+
+		# 检查过起点
 		var prev_idx := player_grid_index
 		player_grid_index = (player_grid_index + 1) % map_total_grids
-
-		# 检查是否经过起点
 		if prev_idx > player_grid_index:
 			player_gold += 50
 			var rl: Label = $TopBar/DiceRewardLabel as Label
 			if rl:
-				rl.text = "🎲 掷骰奖励: 过起点 +50金!"
+				rl.text = "🎲 过起点 +50金!"
 			_refresh_top_bar()
 
-		# 刷新格子显示
+		# 步完成 → 刷新格子内容
 		_refresh_grid_display()
 
-		# 检查是否到达目标
 		if _move_step >= _move_total:
 			_moving = false
+			_bounce_offset = 0.0
+			_scroll_offset = 0.0
+			_slide_grids()  # 地块归位
 			_on_move_complete()
+			return
+		else:
+			_scroll_offset = -_move_step * TILE_W  # 复位起点
+
+	# 每帧刷新地块位置（应用 _scroll_offset）
+	_slide_grids()
+
+
+## 每帧更新地块位置（应用滑动偏移）
+func _slide_grids() -> void:
+	var area := $MapArea
+	var total_span := TILE_COUNT * TILE_W
+	var start_x := (1280.0 - total_span) / 2.0
+	var slot_names := ["PrevGrid2", "PrevGrid1", "CurrentGrid", "NextGrid1", "NextGrid2", "NextGrid3", "NextGrid4"]
+	for i in range(TILE_COUNT):
+		var tile := area.get_node_or_null(slot_names[i])
+		if tile:
+			tile.position.x = start_x + i * TILE_W + _scroll_offset
 
 
 func _on_move_complete() -> void:
