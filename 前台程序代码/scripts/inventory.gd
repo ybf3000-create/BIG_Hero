@@ -5,6 +5,8 @@ extends RefCounted
 ## 物品增删、堆叠、使用
 ## ============================================================
 
+const ItemDBRef = preload("res://scripts/item_db.gd")
+
 signal item_changed
 signal item_used(item_id: int)
 
@@ -15,7 +17,7 @@ var capacity: int = 30
 
 ## 添加物品（自动堆叠）
 func add_item(item_id: int, count: int = 1) -> int:
-	var defn: Dictionary = ItemDB.get_item(item_id)
+	var defn: Dictionary = ItemDBRef.get_item(item_id)
 	if defn.is_empty():
 		return 0
 

@@ -59,6 +59,7 @@ const DiceRollerCls = preload("res://scripts/dice_roller.gd")
 const GridExecutorCls = preload("res://scripts/grid_executor.gd")
 const InventoryCls = preload("res://scripts/inventory.gd")
 const EquipmentCls = preload("res://scripts/equipment.gd")
+const ItemDBRef = preload("res://scripts/item_db.gd")
 
 # 子系统
 var dice: RefCounted
@@ -905,6 +906,13 @@ func _on_settings_pressed()-> void:
 
 ## ============ 背包 UI 面板 ============
 func _show_inventory_panel() -> void:
+	# 本地类型常量（ItemDB class_name 未注册编辑器时不可用）
+	const TYPE_CONSUMABLE: int = 0
+	const TYPE_WEAPON: int = 1
+	const TYPE_ARMOR: int = 2
+	const TYPE_ACCESSORY: int = 3
+	const TYPE_MATERIAL: int = 4
+
 	_auto_save()
 	var panel: Panel = Panel.new()
 	panel.name = "InventoryPanel"
@@ -958,7 +966,7 @@ func _show_inventory_panel() -> void:
 		var slot_lbl: Label = Label.new()
 		slot_lbl.name = "EqText_" + es["name"]
 		if item_id > 0:
-			slot_lbl.text = ItemDB.get_icon(item_id) + " " + ItemDB.get_name(item_id)
+			slot_lbl.text = ItemDBRef.get_icon(item_id) + " " + ItemDBRef.get_name(item_id)
 			slot_lbl.add_theme_color_override("font_color", Color(1.0, 0.9, 0.5))
 		else:
 			slot_lbl.text = "[ 空 ]"
@@ -984,7 +992,7 @@ func _show_inventory_panel() -> void:
 
 	for i in range(cnt):
 		var slot: Dictionary = inventory.get_slot(i)
-		var defn: Dictionary = ItemDB.get_item(slot["item_id"])
+		var defn: Dictionary = ItemDBRef.get_item(slot["item_id"])
 		var row_y: float = 34.0 + i * 28.0
 
 		var icon_lbl: Label = Label.new()
@@ -1003,10 +1011,10 @@ func _show_inventory_panel() -> void:
 		var type_lbl: Label = Label.new()
 		var tname: String = "消耗"
 		match defn.get("type", 0):
-			ItemDB.WEAPON:    tname = "武器"
-			ItemDB.ARMOR:     tname = "防具"
-			ItemDB.ACCESSORY: tname = "饰品"
-			ItemDB.MATERIAL:  tname = "材料"
+			TYPE_WEAPON:    tname = "武器"
+			TYPE_ARMOR:     tname = "防具"
+			TYPE_ACCESSORY: tname = "饰品"
+			TYPE_MATERIAL:  tname = "材料"
 		type_lbl.text = "[" + tname + "]"
 		type_lbl.add_theme_font_size_override("font_size", 11)
 		type_lbl.add_theme_color_override("font_color", Color(0.4, 0.5, 0.7))
@@ -1015,7 +1023,7 @@ func _show_inventory_panel() -> void:
 
 		# 使用/装备按钮
 		var btn: Button = Button.new()
-		var is_equip: bool = (defn["type"] == ItemDB.WEAPON or defn["type"] == ItemDB.ARMOR or defn["type"] == ItemDB.ACCESSORY)
+		var is_equip: bool = (defn["type"] == TYPE_WEAPON or defn["type"] == TYPE_ARMOR or defn["type"] == TYPE_ACCESSORY)
 		btn.text = "装备" if is_equip else "使用"
 		btn.position = Vector2(260, row_y - 2)
 		btn.size = Vector2(50, 22)
@@ -1042,19 +1050,23 @@ func _show_inventory_panel() -> void:
 
 
 func _on_item_action(slot_idx: int) -> void:
+	const TYPE_WEAPON: int = 1
+	const TYPE_ARMOR: int = 2
+	const TYPE_ACCESSORY: int = 3
+
 	var slot: Dictionary = inventory.get_slot(slot_idx)
 	if slot.is_empty():
 		return
-	var defn: Dictionary = ItemDB.get_item(slot["item_id"])
+	var defn: Dictionary = ItemDBRef.get_item(slot["item_id"])
 	var itype: int = defn.get("type", 0)
 
-	if itype == ItemDB.WEAPON or itype == ItemDB.ARMOR or itype == ItemDB.ACCESSORY:
+	if itype == TYPE_WEAPON or itype == TYPE_ARMOR or itype == TYPE_ACCESSORY:
 		# 装备
 		var slot_name: String = ""
 		match itype:
-			ItemDB.WEAPON:    slot_name = "weapon"
-			ItemDB.ARMOR:     slot_name = "armor"
-			ItemDB.ACCESSORY: slot_name = "accessory"
+			TYPE_WEAPON:    slot_name = "weapon"
+			TYPE_ARMOR:     slot_name = "armor"
+			TYPE_ACCESSORY: slot_name = "accessory"
 		var old_id: int = equipment.unequip(slot_name)
 		if old_id > 0:
 			inventory.add_item(old_id, 1)

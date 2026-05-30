@@ -5,6 +5,8 @@ extends RefCounted
 ## 武器/防具/饰品 三槽 + 属性加成计算
 ## ============================================================
 
+const ItemDBRef = preload("res://scripts/item_db.gd")
+
 signal equipment_changed
 
 # 装备槽：key = slot_name, value = item_id (0 = 空)
@@ -19,14 +21,14 @@ var _slots: Dictionary = {
 func equip(slot_name: String, item_id: int) -> bool:
 	if not _slots.has(slot_name):
 		return false
-	var defn: Dictionary = ItemDB.get_item(item_id)
+	var defn: Dictionary = ItemDBRef.get_item(item_id)
 	if defn.is_empty():
 		return false
 	var expected_type: int = -1
 	match slot_name:
-		"weapon":    expected_type = ItemDB.WEAPON
-		"armor":     expected_type = ItemDB.ARMOR
-		"accessory": expected_type = ItemDB.ACCESSORY
+		"weapon":    expected_type = ItemDBRef.WEAPON
+		"armor":     expected_type = ItemDBRef.ARMOR
+		"accessory": expected_type = ItemDBRef.ACCESSORY
 	if defn["type"] != expected_type:
 		return false
 	_slots[slot_name] = item_id
@@ -56,7 +58,7 @@ func get_stat_bonuses() -> Dictionary:
 		var item_id: int = _slots[slot_name]
 		if item_id <= 0:
 			continue
-		var defn: Dictionary = ItemDB.get_item(item_id)
+		var defn: Dictionary = ItemDBRef.get_item(item_id)
 		var stats: Dictionary = defn.get("stats", {})
 		for key in stats:
 			bonuses[key] = bonuses.get(key, 0) + stats[key]
