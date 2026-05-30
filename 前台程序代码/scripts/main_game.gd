@@ -161,6 +161,16 @@ func _build_top_bar() -> void:
 		fallback.position = Vector2(28, 20)
 		bar.add_child(fallback)
 
+	# 头像点击区域（打开属性面板）
+	var avatar_btn := Button.new()
+	avatar_btn.name = "AvatarBtn"
+	avatar_btn.flat = true
+	avatar_btn.position = Vector2(8, 8)
+	avatar_btn.size = Vector2(94, 94)
+	_btn_transparent2(avatar_btn)
+	avatar_btn.pressed.connect(_show_stats_panel)
+	bar.add_child(avatar_btn)
+
 	# -- 名字 + 等级 --
 	var name_lbl := Label.new()
 	name_lbl.name = "NameLabel"
@@ -1109,6 +1119,164 @@ func _on_item_action(slot_idx: int) -> void:
 		inventory.remove_item(slot_idx, 1)
 
 
+## ============ 主角属性详情面板 ============
+func _show_stats_panel() -> void:
+	# 移除旧面板
+	var old: Node = get_node_or_null("StatsPanel")
+	if old:
+		old.queue_free()
+		return
+
+	var panel: Panel = Panel.new()
+	panel.name = "StatsPanel"
+	panel.position = Vector2(140, 40)
+	panel.size = Vector2(500, 620)
+	_panel_style(panel, Color(0.08, 0.09, 0.15))
+
+	# 标题
+	var title: Label = Label.new()
+	title.text = "📋 " + player_name + "  Lv." + str(player_level)
+	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
+	title.position = Vector2(20, 12)
+	panel.add_child(title)
+
+	# 经验条
+	var exp_bar: ProgressBar = ProgressBar.new()
+	exp_bar.position = Vector2(20, 44)
+	exp_bar.size = Vector2(460, 14)
+	exp_bar.value = player_exp
+	exp_bar.max_value = player_exp_max
+	_bar_style(exp_bar, Color(0.15, 0.35, 0.6))
+	panel.add_child(exp_bar)
+
+	var exp_lbl: Label = Label.new()
+	exp_lbl.text = str(player_exp) + " / " + str(player_exp_max)
+	exp_lbl.add_theme_font_size_override("font_size", 10)
+	exp_lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+	exp_lbl.position = Vector2(20, 60)
+	panel.add_child(exp_lbl)
+
+	# 属性列表
+	var stats: Array[Dictionary] = [
+		{ "icon": "❤️", "name": "生命值 (HP)",   "value": "500", "desc": "归零则战斗失败，消耗1枚复活币复活。\n每级+80" },
+		{ "icon": "⚔️", "name": "攻击力 (ATK)",  "value": "25", "desc": "基础攻击力，与装备攻击力相加后\n受自由属性点和装备词条加成" },
+		{ "icon": "🛡️", "name": "防御力 (DEF)",  "value": "15", "desc": "决定受到的伤害减免。\n每点防御→减伤系数增加" },
+		{ "icon": "👟", "name": "速度 (SPD)",    "value": "0",  "desc": "每点-1%出手CD（上限50%）。\n3.0秒× (1-速度%) = 实际CD" },
+		{ "icon": "🍀", "name": "幸运 (LUK)",    "value": "0",  "desc": "每点+2%稀有掉落/好事件概率。\n影响宝箱品质、命运事件、战斗掉落" },
+		{ "icon": "💥", "name": "暴击率",        "value": "5%", "desc": "攻击时触发暴击的概率。\n暴击伤害=攻击力×暴击倍率" },
+		{ "icon": "💢", "name": "暴击伤害",       "value": "150%","desc": "暴击时的伤害倍率。\n基础150%，装备/宝石可提高" },
+		{ "icon": "🎯", "name": "命中率",        "value": "100%","desc": "决定攻击是否命中。\n可抵消目标的闪避率" },
+		{ "icon": "💨", "name": "闪避率",        "value": "0%", "desc": "完全躲避攻击的概率。\n实际闪避=我方闪避-敌方命中" },
+		{ "icon": "🛡️", "name": "格挡率",        "value": "0%", "desc": "格挡后伤害减半。\n暴击+格挡同时触发=暴击×0.5" },
+	]
+
+	var sy: float = 88.0
+	for st in stats:
+		# 行背景
+		var row: ColorRect = ColorRect.new()
+		row.position = Vector2(16, sy)
+		row.size = Vector2(468, 44)
+		row.color = Color(0.10, 0.11, 0.18)
+		panel.add_child(row)
+
+		# 图标
+		var icon: Label = Label.new()
+		icon.text = st["icon"]
+		icon.add_theme_font_size_override("font_size", 18)
+		icon.position = Vector2(24, sy + 8)
+		panel.add_child(icon)
+
+		# 名称
+		var name_lbl: Label = Label.new()
+		name_lbl.text = st["name"]
+		name_lbl.add_theme_font_size_override("font_size", 14)
+		name_lbl.add_theme_color_override("font_color", Color(0.8, 0.85, 0.9))
+		name_lbl.position = Vector2(55, sy + 10)
+		panel.add_child(name_lbl)
+
+		# 数值
+		var val_lbl: Label = Label.new()
+		val_lbl.text = st["value"]
+		val_lbl.add_theme_font_size_override("font_size", 16)
+		val_lbl.add_theme_color_override("font_color", Color(1.0, 0.9, 0.3))
+		val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		val_lbl.position = Vector2(344, sy + 8)
+		val_lbl.size = Vector2(120, 24)
+		panel.add_child(val_lbl)
+
+		# 点击查看说明
+		var btn: Button = Button.new()
+		btn.text = "?"
+		btn.position = Vector2(435, sy + 8)
+		btn.size = Vector2(36, 24)
+		btn.add_theme_font_size_override("font_size", 12)
+		_btn_style_mini(btn, Color(0.15, 0.22, 0.38))
+		var desc: String = st["desc"]
+		btn.pressed.connect(func(): _show_stat_tooltip(st["name"], desc))
+		panel.add_child(btn)
+
+		sy += 47.0
+
+	# 底部信息
+	sy += 10.0
+	var footer: Label = Label.new()
+	footer.text = "💰 " + str(player_gold) + "金币  |  ♻️ " + str(player_revive) + "/" + str(player_max_revive) + "复活币  |  位置 " + str(player_grid_index) + "/" + str(map_total_grids)
+	footer.add_theme_font_size_override("font_size", 12)
+	footer.add_theme_color_override("font_color", Color(0.5, 0.55, 0.6))
+	footer.position = Vector2(20, sy)
+	panel.add_child(footer)
+
+	# 关闭
+	var close: Button = Button.new()
+	close.text = "✕"
+	close.position = Vector2(458, 8)
+	close.size = Vector2(30, 28)
+	_btn_style_mini(close, Color(0.3, 0.1, 0.1))
+	close.pressed.connect(panel.queue_free)
+	panel.add_child(close)
+
+	add_child(panel)
+
+
+## 属性气泡说明
+func _show_stat_tooltip(stat_name: String, desc: String) -> void:
+	var old: Node = get_node_or_null("StatTooltip")
+	if old:
+		old.queue_free()
+
+	var tip: Panel = Panel.new()
+	tip.name = "StatTooltip"
+	tip.position = Vector2(360, 280)
+	tip.size = Vector2(320, 120)
+	_panel_style(tip, Color(0.05, 0.06, 0.12, 0.95))
+
+	var title: Label = Label.new()
+	title.text = stat_name
+	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
+	title.position = Vector2(16, 10)
+	tip.add_child(title)
+
+	var body: Label = Label.new()
+	body.text = desc
+	body.add_theme_font_size_override("font_size", 12)
+	body.add_theme_color_override("font_color", Color(0.8, 0.8, 0.85))
+	body.position = Vector2(16, 34)
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD
+	body.size = Vector2(288, 76)
+	tip.add_child(body)
+
+	# 自动消失
+	var t: SceneTreeTimer = get_tree().create_timer(3.0)
+	t.timeout.connect(func():
+		if is_instance_valid(tip):
+			tip.queue_free()
+	)
+
+	add_child(tip)
+
+
 ## ============ 样式工具 ============
 func _panel_style(node: Panel, clr: Color) -> void:
 	var sb := StyleBoxFlat.new()
@@ -1136,6 +1304,16 @@ func _btn_style_mini(btn: Button, clr: Color) -> void:
 	btn.add_theme_stylebox_override("normal", n)
 	btn.add_theme_color_override("font_color", Color.WHITE)
 	btn.flat = true
+
+## 透明按钮（hover 微弱高亮）
+func _btn_transparent2(btn: Button) -> void:
+	var normal: StyleBoxFlat = StyleBoxFlat.new()
+	normal.bg_color = Color(1, 1, 1, 0)
+	var hover: StyleBoxFlat = StyleBoxFlat.new()
+	hover.bg_color = Color(1, 1, 1, 0.06)
+	btn.add_theme_stylebox_override("normal", normal)
+	btn.add_theme_stylebox_override("hover", hover)
+	btn.add_theme_stylebox_override("pressed", normal)
 
 func _btn_style(btn: Button, clr: Color) -> void:
 	var n: StyleBoxFlat = StyleBoxFlat.new()
