@@ -907,7 +907,6 @@ func _on_settings_pressed()-> void:
 ## ============ 背包 UI 面板 ============
 func _show_inventory_panel() -> void:
 	# 本地类型常量（ItemDB class_name 未注册编辑器时不可用）
-	const TYPE_CONSUMABLE: int = 0
 	const TYPE_WEAPON: int = 1
 	const TYPE_ARMOR: int = 2
 	const TYPE_SHOES: int = 3
@@ -1042,7 +1041,8 @@ func _show_inventory_panel() -> void:
 
 		# 使用/装备按钮
 		var btn: Button = Button.new()
-		var is_equip: bool = (itype >= TYPE_WEAPON and itype <= TYPE_CHARM)
+		var itype_int: int = defn.get("type", 0)
+		var is_equip: bool = (itype_int >= TYPE_WEAPON and itype_int <= TYPE_CHARM)
 		btn.text = "装备" if is_equip else "使用"
 		btn.position = Vector2(260, row_y - 2)
 		btn.size = Vector2(50, 22)
@@ -1071,7 +1071,12 @@ func _show_inventory_panel() -> void:
 func _on_item_action(slot_idx: int) -> void:
 	const TYPE_WEAPON: int = 1
 	const TYPE_ARMOR: int = 2
-	const TYPE_ACCESSORY: int = 3
+	const TYPE_SHOES: int = 3
+	const TYPE_RING: int = 4
+	const TYPE_NECKLACE: int = 5
+	const TYPE_CAPE: int = 6
+	const TYPE_HELMET: int = 7
+	const TYPE_CHARM: int = 8
 
 	var slot: Dictionary = inventory.get_slot(slot_idx)
 	if slot.is_empty():

@@ -8,7 +8,6 @@ extends RefCounted
 const ItemDBRef = preload("res://scripts/item_db.gd")
 
 signal item_changed
-signal item_used(item_id: int)
 
 # items: Array[{ item_id: int, count: int }]
 var items: Array[Dictionary] = []
