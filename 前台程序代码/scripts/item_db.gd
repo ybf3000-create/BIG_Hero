@@ -6,11 +6,16 @@ extends RefCounted
 ## ============================================================
 
 enum ItemType {
-	CONSUMABLE = 0,  # 消耗品
-	WEAPON     = 1,  # 武器
-	ARMOR      = 2,  # 防具
-	ACCESSORY  = 3,  # 饰品
-	MATERIAL   = 4,  # 材料
+	CONSUMABLE = 0,
+	WEAPON     = 1,
+	ARMOR      = 2,   # 衣服/防具
+	SHOES      = 3,   # 鞋子
+	RING       = 4,   # 戒指
+	NECKLACE   = 5,   # 项链
+	CAPE       = 6,   # 披风
+	HELMET     = 7,   # 头盔
+	CHARM      = 8,   # 护符
+	MATERIAL   = 9,   # 材料
 }
 
 # 物品模板结构：{ id, name, type, icon, desc, price, stack_max, stats }
@@ -37,13 +42,33 @@ static func _init_all() -> void:
 		21: { "id": 21, "name": "锁子甲", "type": 2, "icon": "🛡️", "desc": "精良防具",   "price": 250, "stack_max": 1, "stats": { "def": 12 } },
 		22: { "id": 22, "name": "龙鳞甲", "type": 2, "icon": "🐉", "desc": "龙鳞打造",   "price": 500, "stack_max": 1, "stats": { "def": 22, "hp": 30 } },
 
-		# ======== 饰品 ========
-		30: { "id": 30, "name": "速度戒指", "type": 3, "icon": "💍", "desc": "速度+8",  "price": 200, "stack_max": 1, "stats": { "spd": 8 } },
-		31: { "id": 31, "name": "幸运护符", "type": 3, "icon": "🍀", "desc": "幸运+12", "price": 300, "stack_max": 1, "stats": { "luk": 12 } },
+		# ======== 鞋子 ========
+		30: { "id": 30, "name": "布鞋",     "type": 3, "icon": "👟", "desc": "基础鞋子",   "price": 60,  "stack_max": 1, "stats": { "spd": 4 } },
+		31: { "id": 31, "name": "疾风靴",   "type": 3, "icon": "👢", "desc": "速度+10",    "price": 250, "stack_max": 1, "stats": { "spd": 10 } },
+
+		# ======== 戒指 ========
+		40: { "id": 40, "name": "铜戒指",   "type": 4, "icon": "💍", "desc": "攻击+3",     "price": 120, "stack_max": 1, "stats": { "atk": 3 } },
+		41: { "id": 41, "name": "力量戒指", "type": 4, "icon": "💎", "desc": "攻击+10",    "price": 350, "stack_max": 1, "stats": { "atk": 10 } },
+
+		# ======== 项链 ========
+		50: { "id": 50, "name": "银项链",   "type": 5, "icon": "📿", "desc": "生命+20",    "price": 150, "stack_max": 1, "stats": { "hp": 20 } },
+		51: { "id": 51, "name": "生命项链", "type": 5, "icon": "🔮", "desc": "生命+50",    "price": 400, "stack_max": 1, "stats": { "hp": 50 } },
+
+		# ======== 披风 ========
+		60: { "id": 60, "name": "麻布披风", "type": 6, "icon": "🧣", "desc": "防御+3",     "price": 100, "stack_max": 1, "stats": { "def": 3 } },
+		61: { "id": 61, "name": "英雄披风", "type": 6, "icon": "🦸", "desc": "全属性+3",   "price": 500, "stack_max": 1, "stats": { "atk": 3, "def": 3, "spd": 3 } },
+
+		# ======== 头盔 ========
+		70: { "id": 70, "name": "皮帽",     "type": 7, "icon": "🎩", "desc": "防御+4",     "price": 80,  "stack_max": 1, "stats": { "def": 4 } },
+		71: { "id": 71, "name": "钢盔",     "type": 7, "icon": "⛑", "desc": "防御+12",    "price": 300, "stack_max": 1, "stats": { "def": 12 } },
+
+		# ======== 护符 ========
+		80: { "id": 80, "name": "幸运符",   "type": 8, "icon": "🍀", "desc": "幸运+5",     "price": 180, "stack_max": 1, "stats": { "luk": 5 } },
+		81: { "id": 81, "name": "守护护符", "type": 8, "icon": "🛡️", "desc": "幸运+15",   "price": 450, "stack_max": 1, "stats": { "luk": 15 } },
 
 		# ======== 材料 ========
-		50: { "id": 50, "name": "铁矿石", "type": 4, "icon": "⛰", "desc": "锻造材料", "price": 15, "stack_max": 99, "stats": {} },
-		51: { "id": 51, "name": "龙鳞片", "type": 4, "icon": "🪶", "desc": "稀有材料", "price": 50, "stack_max": 50, "stats": {} },
+		90: { "id": 90, "name": "铁矿石", "type": 9, "icon": "⛰", "desc": "锻造材料", "price": 15, "stack_max": 99, "stats": {} },
+		91: { "id": 91, "name": "龙鳞片", "type": 9, "icon": "🪶", "desc": "稀有材料", "price": 50, "stack_max": 50, "stats": {} },
 	}
 
 

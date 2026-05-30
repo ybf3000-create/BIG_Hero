@@ -907,11 +907,16 @@ func _on_settings_pressed()-> void:
 ## ============ 背包 UI 面板 ============
 func _show_inventory_panel() -> void:
 	# 本地类型常量（ItemDB class_name 未注册编辑器时不可用）
-	const TYPE_CONSUMABLE: int = 0
-	const TYPE_WEAPON: int = 1
-	const TYPE_ARMOR: int = 2
-	const TYPE_ACCESSORY: int = 3
-	const TYPE_MATERIAL: int = 4
+		const TYPE_CONSUMABLE: int = 0
+		const TYPE_WEAPON: int = 1
+		const TYPE_ARMOR: int = 2
+		const TYPE_SHOES: int = 3
+		const TYPE_RING: int = 4
+		const TYPE_NECKLACE: int = 5
+		const TYPE_CAPE: int = 6
+		const TYPE_HELMET: int = 7
+		const TYPE_CHARM: int = 8
+		const TYPE_MATERIAL: int = 9
 
 	_auto_save()
 	var panel: Panel = Panel.new()
@@ -943,22 +948,31 @@ func _show_inventory_panel() -> void:
 	equip_panel.add_child(equip_title)
 
 	var equip_slots: Array[Dictionary] = [
-		{ "name": "weapon",    "label": "武器", "y": 40 },
-		{ "name": "armor",     "label": "防具", "y": 130 },
-		{ "name": "accessory", "label": "饰品", "y": 220 },
+		{ "name": "weapon",   "label": "武器" },
+		{ "name": "armor",    "label": "防具" },
+		{ "name": "shoes",    "label": "鞋子" },
+		{ "name": "ring",     "label": "戒指" },
+		{ "name": "necklace", "label": "项链" },
+		{ "name": "cape",     "label": "披风" },
+		{ "name": "helmet",   "label": "头盔" },
+		{ "name": "charm",    "label": "护符" },
 	]
-	for es in equip_slots:
+	var row_h: float = 40.0
+	for j in range(equip_slots.size()):
+		var es: Dictionary = equip_slots[j]
+		var ry: float = 38.0 + j * row_h
+
 		var eq_lbl: Label = Label.new()
 		eq_lbl.text = es["label"]
-		eq_lbl.add_theme_font_size_override("font_size", 14)
+		eq_lbl.add_theme_font_size_override("font_size", 13)
 		eq_lbl.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
-		eq_lbl.position = Vector2(10, es["y"])
+		eq_lbl.position = Vector2(10, ry)
 		equip_panel.add_child(eq_lbl)
 
 		var slot_bg: ColorRect = ColorRect.new()
 		slot_bg.name = "EqSlot_" + es["name"]
-		slot_bg.position = Vector2(50, es["y"] + 20)
-		slot_bg.size = Vector2(210, 60)
+		slot_bg.position = Vector2(48, ry + 16)
+		slot_bg.size = Vector2(218, 28)
 		slot_bg.color = Color(0.14, 0.15, 0.22)
 		equip_panel.add_child(slot_bg)
 
@@ -971,8 +985,8 @@ func _show_inventory_panel() -> void:
 		else:
 			slot_lbl.text = "[ 空 ]"
 			slot_lbl.add_theme_color_override("font_color", Color(0.3, 0.3, 0.4))
-		slot_lbl.add_theme_font_size_override("font_size", 14)
-		slot_lbl.position = Vector2(58, es["y"] + 36)
+		slot_lbl.add_theme_font_size_override("font_size", 12)
+		slot_lbl.position = Vector2(54, ry + 19)
 		equip_panel.add_child(slot_lbl)
 
 	# 道具列表（右侧）
@@ -1013,7 +1027,12 @@ func _show_inventory_panel() -> void:
 		match defn.get("type", 0):
 			TYPE_WEAPON:    tname = "武器"
 			TYPE_ARMOR:     tname = "防具"
-			TYPE_ACCESSORY: tname = "饰品"
+			TYPE_SHOES:     tname = "鞋子"
+			TYPE_RING:      tname = "戒指"
+			TYPE_NECKLACE:  tname = "项链"
+			TYPE_CAPE:      tname = "披风"
+			TYPE_HELMET:    tname = "头盔"
+			TYPE_CHARM:     tname = "护符"
 			TYPE_MATERIAL:  tname = "材料"
 		type_lbl.text = "[" + tname + "]"
 		type_lbl.add_theme_font_size_override("font_size", 11)
@@ -1023,7 +1042,7 @@ func _show_inventory_panel() -> void:
 
 		# 使用/装备按钮
 		var btn: Button = Button.new()
-		var is_equip: bool = (defn["type"] == TYPE_WEAPON or defn["type"] == TYPE_ARMOR or defn["type"] == TYPE_ACCESSORY)
+		var is_equip: bool = (itype >= TYPE_WEAPON and itype <= TYPE_CHARM)
 		btn.text = "装备" if is_equip else "使用"
 		btn.position = Vector2(260, row_y - 2)
 		btn.size = Vector2(50, 22)
@@ -1060,13 +1079,17 @@ func _on_item_action(slot_idx: int) -> void:
 	var defn: Dictionary = ItemDBRef.get_item(slot["item_id"])
 	var itype: int = defn.get("type", 0)
 
-	if itype == TYPE_WEAPON or itype == TYPE_ARMOR or itype == TYPE_ACCESSORY:
-		# 装备
+	if itype >= TYPE_WEAPON and itype <= TYPE_CHARM:
 		var slot_name: String = ""
 		match itype:
-			TYPE_WEAPON:    slot_name = "weapon"
-			TYPE_ARMOR:     slot_name = "armor"
-			TYPE_ACCESSORY: slot_name = "accessory"
+			TYPE_WEAPON:   slot_name = "weapon"
+			TYPE_ARMOR:    slot_name = "armor"
+			TYPE_SHOES:    slot_name = "shoes"
+			TYPE_RING:     slot_name = "ring"
+			TYPE_NECKLACE: slot_name = "necklace"
+			TYPE_CAPE:     slot_name = "cape"
+			TYPE_HELMET:   slot_name = "helmet"
+			TYPE_CHARM:    slot_name = "charm"
 		var old_id: int = equipment.unequip(slot_name)
 		if old_id > 0:
 			inventory.add_item(old_id, 1)

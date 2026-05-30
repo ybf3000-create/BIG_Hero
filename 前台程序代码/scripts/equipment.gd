@@ -1,42 +1,51 @@
 class_name Equipment
 extends RefCounted
 ## ============================================================
-## Equipment - 装备栏管理 v0.1
-## 武器/防具/饰品 三槽 + 属性加成计算
+## Equipment - 装备栏管理 v0.2
+## 8 槽位：武器·防具·鞋子·戒指·项链·披风·头盔·护符
 ## ============================================================
 
 const ItemDBRef = preload("res://scripts/item_db.gd")
 
 signal equipment_changed
 
-# 装备槽：key = slot_name, value = item_id (0 = 空)
+# 装备槽 key → type_id（与 ItemDB enum 对齐）
 var _slots: Dictionary = {
-	"weapon":    0,
-	"armor":     0,
-	"accessory": 0,
+	"weapon":    0,  # type=1
+	"armor":     0,  # type=2
+	"shoes":     0,  # type=3
+	"ring":      0,  # type=4
+	"necklace":  0,  # type=5
+	"cape":      0,  # type=6
+	"helmet":    0,  # type=7
+	"charm":     0,  # type=8
+}
+
+const SLOT_TYPE: Dictionary = {
+	"weapon":    1,
+	"armor":     2,
+	"shoes":     3,
+	"ring":      4,
+	"necklace":  5,
+	"cape":      6,
+	"helmet":    7,
+	"charm":     8,
 }
 
 
-## 穿戴装备
 func equip(slot_name: String, item_id: int) -> bool:
 	if not _slots.has(slot_name):
 		return false
 	var defn: Dictionary = ItemDBRef.get_item(item_id)
 	if defn.is_empty():
 		return false
-	var expected_type: int = -1
-	match slot_name:
-		"weapon":    expected_type = 1
-		"armor":     expected_type = 2
-		"accessory": expected_type = 3
-	if defn["type"] != expected_type:
+	if defn["type"] != SLOT_TYPE.get(slot_name, -1):
 		return false
 	_slots[slot_name] = item_id
 	equipment_changed.emit()
 	return true
 
 
-## 卸下装备
 func unequip(slot_name: String) -> int:
 	if not _slots.has(slot_name):
 		return 0
@@ -46,12 +55,10 @@ func unequip(slot_name: String) -> int:
 	return old_id
 
 
-## 获取槽位物品ID
 func get_slot_item(slot_name: String) -> int:
 	return _slots.get(slot_name, 0)
 
 
-## 计算总属性加成
 func get_stat_bonuses() -> Dictionary:
 	var bonuses: Dictionary = {}
 	for slot_name in _slots:
@@ -65,7 +72,6 @@ func get_stat_bonuses() -> Dictionary:
 	return bonuses
 
 
-## 序列化
 func to_dict() -> Dictionary:
 	return _slots.duplicate()
 
