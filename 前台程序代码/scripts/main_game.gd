@@ -907,16 +907,16 @@ func _on_settings_pressed()-> void:
 ## ============ 背包 UI 面板 ============
 func _show_inventory_panel() -> void:
 	# 本地类型常量（ItemDB class_name 未注册编辑器时不可用）
-		const TYPE_CONSUMABLE: int = 0
-		const TYPE_WEAPON: int = 1
-		const TYPE_ARMOR: int = 2
-		const TYPE_SHOES: int = 3
-		const TYPE_RING: int = 4
-		const TYPE_NECKLACE: int = 5
-		const TYPE_CAPE: int = 6
-		const TYPE_HELMET: int = 7
-		const TYPE_CHARM: int = 8
-		const TYPE_MATERIAL: int = 9
+	const TYPE_CONSUMABLE: int = 0
+	const TYPE_WEAPON: int = 1
+	const TYPE_ARMOR: int = 2
+	const TYPE_SHOES: int = 3
+	const TYPE_RING: int = 4
+	const TYPE_NECKLACE: int = 5
+	const TYPE_CAPE: int = 6
+	const TYPE_HELMET: int = 7
+	const TYPE_CHARM: int = 8
+	const TYPE_MATERIAL: int = 9
 
 	_auto_save()
 	var panel: Panel = Panel.new()
