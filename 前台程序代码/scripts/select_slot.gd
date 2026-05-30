@@ -476,11 +476,18 @@ func _btn_style(btn: Button, clr: Color) -> void:
 
 
 func _btn_transparent(btn: Button) -> void:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(1, 1, 1, 0)
-	btn.add_theme_stylebox_override("normal", sb)
-	btn.add_theme_stylebox_override("hover", sb)
-	btn.add_theme_stylebox_override("pressed", sb)
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(1, 1, 1, 0)
+
+	var hover := StyleBoxFlat.new()
+	hover.bg_color = Color(1, 1, 1, 0.08)
+
+	var pressed := StyleBoxFlat.new()
+	pressed.bg_color = Color(1, 1, 1, 0.15)
+
+	btn.add_theme_stylebox_override("normal", normal)
+	btn.add_theme_stylebox_override("hover", hover)
+	btn.add_theme_stylebox_override("pressed", pressed)
 
 
 func _bar_style(node: ProgressBar, clr: Color) -> void:

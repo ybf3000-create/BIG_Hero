@@ -334,14 +334,6 @@ func _build_map_area() -> void:
 	area.size = Vector2(1280, 400)
 	_panel_style(area, Color(0.06, 0.07, 0.09))
 
-	# -- 场景背景提示 --
-	var bg_hint := Label.new()
-	bg_hint.text = "（场景背景区域）"
-	bg_hint.add_theme_font_size_override("font_size", 14)
-	bg_hint.add_theme_color_override("font_color", Color(0.2, 0.2, 0.25))
-	bg_hint.position = Vector2(540, 120)
-	area.add_child(bg_hint)
-
 	# -- 平行四边形地块（下移到靠近底部，不占底部UI） --
 	var total_span := TILE_COUNT * TILE_W
 	var start_x := (1280.0 - total_span) / 2.0
