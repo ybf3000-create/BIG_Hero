@@ -597,37 +597,33 @@ func _on_dice_roll() -> void:
 	_moving = true
 
 
-## 步进移动：每步先停顿 0.3s，再滑动 0.25s
+## 步进移动：每步停顿→滑动→复位→刷新内容
 func _process(delta: float) -> void:
 	if not _moving:
 		return
 
 	_move_timer += delta
-
-	# 当前步的总进度 0～STEP_TOTAL
-	var step_phase: float = _move_timer / STEP_TOTAL
-
-	# 滑动发生在 phase > (STEP_PAUSE / STEP_TOTAL) 的部分
+	var step_phase: float = _move_timer / STEP_TOTAL  # 当前步进度 0~1
 	var slide_start: float = STEP_PAUSE / STEP_TOTAL
-	var slide_phase: float = 0.0
+
 	if step_phase > slide_start:
-		slide_phase = (step_phase - slide_start) / (1.0 - slide_start)
-		_scroll_offset = -_move_step * TILE_W - TILE_W * slide_phase
-		_bounce_offset = -abs(sin(slide_phase * PI)) * 22.0
+		# 滑动阶段：偏移从 0 → -TILE_W
+		var sp: float = (step_phase - slide_start) / (1.0 - slide_start)
+		_scroll_offset = -TILE_W * sp
+		_bounce_offset = -abs(sin(sp * PI)) * 22.0
 	else:
-		_scroll_offset = -_move_step * TILE_W
+		_scroll_offset = 0.0
 		_bounce_offset = 0.0
 
 	_slide_grids()
 
-	# 单步完成
+	# 单步完成 → 复位偏移 + 刷新格子内容（补右边新格子）
 	if _move_timer >= STEP_TOTAL:
 		_move_timer = 0.0
 		_move_step += 1
-		_scroll_offset = -_move_step * TILE_W
+		_scroll_offset = 0.0
 		_bounce_offset = 0.0
 
-		# 更新格子索引
 		player_grid_index = (player_grid_index + 1) % map_total_grids
 		var prev_idx := (player_grid_index - 1 + map_total_grids) % map_total_grids
 		if prev_idx > player_grid_index:
@@ -640,13 +636,14 @@ func _process(delta: float) -> void:
 		_refresh_grid_display()
 		_slide_grids()
 
-		# 全部完成
 		if _move_step >= _move_total:
 			_moving = false
 			_scroll_offset = 0.0
 			_bounce_offset = 0.0
 			_move_step = 0
 			_move_total = 0
+			_slide_grids()
+			_on_move_complete()
 			_slide_grids()
 			_on_move_complete()
 
@@ -815,6 +812,10 @@ func _refresh_grid_display() -> void:
 		var fill: Color = clr if is_current else clr.darkened(0.55)
 		var border: Color = Color(1.0, 1.0, 0.2, 0.9) if is_current else Color(0.5, 0.5, 0.6, 0.5)
 		tile.setup(info["icon"], info["name"] + "#" + str(grid_idx), fill, border)
+
+		# 视野外格子半透明
+		var dist := absi(i - 3)
+		tile.modulate.a = 1.0 if dist <= 2 else maxf(0.15, 1.0 - (dist - 2) * 0.28)
 
 	# 主角位置更新
 	var hero: TextureRect = area.get_node_or_null("HeroOnMap") as TextureRect
