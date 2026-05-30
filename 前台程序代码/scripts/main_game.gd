@@ -337,9 +337,9 @@ func _build_map_area() -> void:
 	# -- 平行四边形地块（下移到靠近底部，不占底部UI） --
 	var total_span := TILE_COUNT * TILE_W
 	var start_x := (1280.0 - total_span) / 2.0
-	var tile_y := area.size.y - TILE_H - 12  # 靠下，留 12px 间距
+	var tile_y: float = area.size.y - TILE_H - 12  # 靠下，留 12px 间距
 	var slot_names := ["PrevGrid2", "PrevGrid1", "CurrentGrid", "NextGrid1", "NextGrid2", "NextGrid3", "NextGrid4"]
-	var grid_tile_y := tile_y  # 主角定位用
+	var grid_tile_y: float = tile_y  # 主角定位用
 
 	for i in range(TILE_COUNT):
 		var tile: Control = GridTileCls.new()
@@ -421,7 +421,7 @@ func _position_hero_on_tile(hero: TextureRect, tile_index: int, p_area: Control 
 		return
 	var total_span := TILE_COUNT * TILE_W
 	var start_x := (1280.0 - total_span) / 2.0
-	var tile_y := area.size.y - TILE_H - 12  # 与 _build_map_area 一致
+	var tile_y: float = area.size.y - TILE_H - 12  # 与 _build_map_area 一致
 	# 平行四边形几何中心
 	var center_x: float = start_x + tile_index * TILE_W + TILE_W / 2.0 + TILE_SHEAR / 2.0
 	var center_y: float = tile_y + TILE_H / 2.0
@@ -664,7 +664,7 @@ func _slide_grids() -> void:
 	# 主角弹跳：基于基准位置 + 当前弹跳偏移
 	var hero: TextureRect = area.get_node_or_null("HeroOnMap") as TextureRect
 	if hero:
-		var tile_y := area.size.y - TILE_H - 12
+		var tile_y: float = area.size.y - TILE_H - 12
 		var cx: float = start_x + 3 * TILE_W + TILE_W / 2.0 + TILE_SHEAR / 2.0
 		var cy: float = tile_y + TILE_H / 2.0
 		hero.position = Vector2(cx - hero.size.x / 2.0, cy - hero.size.y + 10 + _bounce_offset)
