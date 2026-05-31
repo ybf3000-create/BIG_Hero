@@ -143,7 +143,7 @@ func _build_top_bar() -> void:
 	avatar_bg.color = Color(0.18, 0.18, 0.28)
 	bar.add_child(avatar_bg)
 
-	var avatar_tex := load("res://assets/主角.bmp")
+	var avatar_tex := load("res://assets/主角.png")
 	if avatar_tex:
 		var avatar := TextureRect.new()
 		avatar.name = "AvatarImg"
@@ -367,8 +367,8 @@ func _build_map_area() -> void:
 		tile.set_label_positions(0, 0)
 		area.add_child(tile)
 
-	# -- 主角图像（居中当前格，色键透明背景） --
-	var hero_tex := load("res://assets/主角.bmp")
+	# -- 主角图像（PNG 自带透明背景） --
+	var hero_tex := load("res://assets/主角.png")
 	if hero_tex:
 		var hero := TextureRect.new()
 		hero.name = "HeroOnMap"
@@ -376,14 +376,6 @@ func _build_map_area() -> void:
 		hero.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		hero.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		hero.size = Vector2(130, 130)
-
-		# 色键透明背景
-		var shader_mat := ShaderMaterial.new()
-		var chroma_shader := load("res://assets/hero_chroma.gdshader")
-		if chroma_shader:
-			shader_mat.shader = chroma_shader
-			hero.material = shader_mat
-
 		area.add_child(hero)
 		_position_hero_on_tile(hero, 3, area)  # 初始在当前格
 	else:
