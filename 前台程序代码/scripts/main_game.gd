@@ -1201,7 +1201,7 @@ func _show_stats_panel() -> void:
 		val_lbl.add_theme_font_size_override("font_size", 16)
 		val_lbl.add_theme_color_override("font_color", Color(1.0, 0.9, 0.3))
 		val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		val_lbl.position = Vector2(344, sy + 8)
+		val_lbl.position = Vector2(194, sy + 8)
 		val_lbl.size = Vector2(120, 24)
 		panel.add_child(val_lbl)
 

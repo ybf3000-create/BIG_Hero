@@ -71,8 +71,8 @@ func _resize_labels() -> void:
 	# 标签在平行四边形内左下角
 	var h := size.y
 	if _icon_label:
-		_icon_label.position = Vector2(SHEAR + 6, h - 26)
+		_icon_label.position = Vector2(SHEAR + 6 - 35, h - 26)
 		_icon_label.size = Vector2(28, 22)
 	if _name_label:
-		_name_label.position = Vector2(SHEAR + 36, h - 26)
+		_name_label.position = Vector2(SHEAR + 36 - 35, h - 26)
 		_name_label.size = Vector2(size.x - SHEAR - 42, 22)
