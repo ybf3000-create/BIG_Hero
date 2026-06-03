@@ -915,7 +915,8 @@ func _show_dice_popup(roll: int, suit: String) -> void:
 
 
 ## ============ 按钮回调 ============
-func _close_all_tooltips() -> void:
+func _qcolor(q: int) -> Color:
+	return EquipData.QUALITY_COLORS.get(q, Color.GRAY)
 	for t in _tooltip_nodes:
 		if is_instance_valid(t):
 			t.queue_free()
@@ -1052,7 +1053,7 @@ func _show_inventory_panel() -> void:
 			qb.bg_color = Color(1,1,1,0)
 			qb.border_width_left = 2; qb.border_width_right = 2
 			qb.border_width_top = 2; qb.border_width_bottom = 2
-			qb.border_color = eqp.get("quality_color", Color.GRAY)
+			qb.border_color = _qcolor(eqp.get("quality", 0))
 			# 用Panel来显示边框
 			var qp: Panel = Panel.new()
 			qp.position = Vector2(47, ry - 1)
@@ -1225,7 +1226,7 @@ func _build_equip_tab(area: Panel, main_panel: Panel) -> void:
 			break
 
 		# 品质边框
-		var qclr: Color = eqp.get("quality_color", Color.GRAY)
+		var qclr: Color = _qcolor(eqp.get("quality", 0))
 		var qborder: Panel = Panel.new()
 		qborder.position = Vector2(x - 1, y - 1)
 		qborder.size = Vector2(icon_s + 2, icon_s + 2)
@@ -1304,7 +1305,7 @@ func _show_equip_tooltip(eqp: Dictionary, idx: int, slot_name: String, main_pane
 	tip.add_child(bg_btn)
 
 	var sy: float = 8.0
-	var qclr: Color = eqp.get("quality_color", Color.GRAY)
+	var qclr: Color = _qcolor(eqp.get("quality", 0))
 	var qname: String = eqp.get("quality_name", "")
 
 	# 品质色条
@@ -1532,7 +1533,7 @@ func _show_dismantle_panel(main_panel: Panel) -> void:
 			break
 
 		# 品质框
-		var qclr: Color = eqp.get("quality_color", Color.GRAY)
+		var qclr: Color = _qcolor(eqp.get("quality", 0))
 		var qp: Panel = Panel.new()
 		qp.position = Vector2(x - 1, y - 1)
 		qp.size = Vector2(icon_s+2, icon_s+2)
