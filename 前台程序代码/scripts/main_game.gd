@@ -962,6 +962,12 @@ var _inv_tab: String = "equip"   # "consume" | "equip"
 var _inv_filter: int = -1        # -1=全部, 0~7=部位type
 
 func _show_inventory_panel() -> void:
+	# 已打开→关闭
+	var old: Node = get_node_or_null("InventoryPanel")
+	if old:
+		old.queue_free()
+		return
+
 	_auto_save()
 
 	var panel: Panel = Panel.new()
