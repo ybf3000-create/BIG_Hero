@@ -959,7 +959,8 @@ func _on_settings_pressed()-> void:
 
 ## ============ 背包 UI 面板 (重制版) ============
 var _inv_tab: String = "equip"   # "consume" | "equip"
-var _inv_filter: int = -1        # -1=全部, 0~7=部位type
+var _inv_filter_quality: int = -1   # -1=全部, 0~4=品质
+var _inv_filter_slot: int = -1      # -1=全部, 0~7=部位
 
 func _show_inventory_panel() -> void:
 	# 已打开→关闭
@@ -1159,27 +1160,49 @@ func _show_inventory_panel() -> void:
 
 	# 装备分解
 	var dismantle_btn: Button = Button.new()
-	dismantle_btn.text = "♻ 装备分解"
-	dismantle_btn.position = Vector2(16, bottom_y)
-	dismantle_btn.size = Vector2(110, 30)
+	dismantle_btn.text = "♻ 分解"
+	dismantle_btn.position = Vector2(900, bottom_y)
+	dismantle_btn.size = Vector2(80, 30)
 	_btn_style_mini(dismantle_btn, Color(0.2, 0.12, 0.2))
 	dismantle_btn.pressed.connect(func(): _show_dismantle_panel(panel))
 	panel.add_child(dismantle_btn)
 
-	# 过滤按钮
-	var filter_btn: Button = Button.new()
-	filter_btn.text = "🔍 过滤: " + (_filter_name())
-	filter_btn.position = Vector2(136, bottom_y)
-	filter_btn.size = Vector2(120, 30)
-	_btn_style_mini(filter_btn, Color(0.12, 0.14, 0.22))
-	filter_btn.pressed.connect(func():
-		_inv_filter = (_inv_filter + 1) % 10  # 循环 0~9 (-1→0→1...→8→ -1)
-		if _inv_filter >= 9:
-			_inv_filter = -1
-		panel.queue_free()
-		_show_inventory_panel()
-	)
-	panel.add_child(filter_btn)
+	# 品质过滤
+	var qlabels: Array[String] = ["全部", "灰", "绿", "蓝", "紫", "橙"]
+	var qcolors: Array[Color] = [Color(0.5,0.5,0.5), Color(0.6,0.6,0.6), Color(0.2,0.8,0.2), Color(0.2,0.4,1.0), Color(0.7,0.2,1.0), Color(1.0,0.6,0.1)]
+	for qi in range(qlabels.size()):
+		var qb: Button = Button.new()
+		qb.text = qlabels[qi]
+		qb.position = Vector2(136 + qi * 58, bottom_y)
+		qb.size = Vector2(52, 26)
+		qb.add_theme_font_size_override("font_size", 10)
+		var qv: int = qi - 1  # -1=全部, 0=灰...
+		var is_active: bool = (_inv_filter_quality == qv)
+		_btn_style_mini(qb, qcolors[qi].darkened(0.4) if not is_active else qcolors[qi].darkened(0.1))
+		qb.pressed.connect(func():
+			_inv_filter_quality = qv
+			panel.queue_free()
+			_show_inventory_panel()
+		)
+		panel.add_child(qb)
+
+	# 部位过滤
+	var slabels: Array[String] = ["全", "武器", "防具", "鞋子", "戒指", "项链", "披风", "头盔", "护符"]
+	for si in range(slabels.size()):
+		var sb: Button = Button.new()
+		sb.text = slabels[si]
+		sb.position = Vector2(136 + si * 52, bottom_y + 28)
+		sb.size = Vector2(46, 22)
+		sb.add_theme_font_size_override("font_size", 10)
+		var sv: int = si - 1  # -1=全部, 0=weapon...
+		var s_active: bool = (_inv_filter_slot == sv)
+		_btn_style_mini(sb, Color(0.12, 0.14, 0.30) if not s_active else Color(0.22, 0.35, 0.55))
+		sb.pressed.connect(func():
+			_inv_filter_slot = sv
+			panel.queue_free()
+			_show_inventory_panel()
+		)
+		panel.add_child(sb)
 
 	# 关闭
 	var close_btn: Button = Button.new()
@@ -1191,20 +1214,6 @@ func _show_inventory_panel() -> void:
 	panel.add_child(close_btn)
 
 	add_child(panel)
-
-
-func _filter_name() -> String:
-	match _inv_filter:
-		-1: return "全部"
-		0:  return "武器"
-		1:  return "防具"
-		2:  return "鞋子"
-		3:  return "戒指"
-		4:  return "项链"
-		5:  return "披风"
-		6:  return "头盔"
-		7:  return "护符"
-	return "全部"
 
 
 func _build_consume_tab(area: Panel, main_panel: Panel) -> void:
@@ -1268,7 +1277,9 @@ func _build_equip_tab(area: Panel, main_panel: Panel) -> void:
 		var eqp: Dictionary = equip_instances[j]
 		if eqp.get("equipped", false):
 			continue
-		if _inv_filter >= 0 and eqp.get("slot_type_id", -1) != _inv_filter:
+		if _inv_filter_quality >= 0 and eqp.get("quality", 0) != _inv_filter_quality:
+			continue
+		if _inv_filter_slot >= 0 and eqp.get("slot_type_id", -1) != _inv_filter_slot:
 			continue
 		filtered.append(j)
 
@@ -1584,17 +1595,61 @@ func _show_dismantle_panel(main_panel: Panel) -> void:
 	_panel_style(dp, Color(0.06, 0.07, 0.13, 0.98))
 
 	var dtitle: Label = Label.new()
-	dtitle.text = "♻ 装备分解 — 选择装备（分解获得精华）"
-	dtitle.add_theme_font_size_override("font_size", 14)
+	dtitle.text = "♻ 装备分解"
+	dtitle.add_theme_font_size_override("font_size", 16)
 	dtitle.add_theme_color_override("font_color", Color(0.8, 0.5, 0.9))
 	dtitle.position = Vector2(12, 8)
 	dp.add_child(dtitle)
 
-	var cols: int = 6
-	var gap: float = 6.0
-	var icon_s: float = 48.0
-	var dy: float = 40.0
+	# 精华说明
+	var info: Label = Label.new()
+	info.text = "灰+1 / 绿+3 / 蓝+8 / 紫+20 / 橙+50   宝石自动拆卸返还"
+	info.add_theme_font_size_override("font_size", 10)
+	info.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
+	info.position = Vector2(12, 28)
+	dp.add_child(info)
+
 	var dismantle_targets: Array[int] = []
+	var essence_label: Label = Label.new()
+	essence_label.text = "预计获得: 0 精华"
+	essence_label.add_theme_font_size_override("font_size", 12)
+	essence_label.add_theme_color_override("font_color", Color(1.0, 0.7, 0.3))
+	essence_label.position = Vector2(500, 8)
+	dp.add_child(essence_label)
+
+	# 全选/取消
+	var select_all_btn: Button = Button.new()
+	select_all_btn.text = "全选"
+	select_all_btn.position = Vector2(500, 30)
+	select_all_btn.size = Vector2(50, 22)
+	_btn_style_mini(select_all_btn, Color(0.15, 0.22, 0.38))
+	select_all_btn.add_theme_font_size_override("font_size", 10)
+	dp.add_child(select_all_btn)
+
+	var deselect_btn: Button = Button.new()
+	deselect_btn.text = "取消"
+	deselect_btn.position = Vector2(558, 30)
+	deselect_btn.size = Vector2(50, 22)
+	_btn_style_mini(deselect_btn, Color(0.2, 0.12, 0.12))
+	deselect_btn.add_theme_font_size_override("font_size", 10)
+	dp.add_child(deselect_btn)
+
+	# 刷新精华显示
+	var _update_essence := func():
+		var total: int = 0
+		for ei in dismantle_targets:
+			if ei < 0 or ei >= equip_instances.size():
+				continue
+			var q: int = equip_instances[ei].get("quality", 0)
+			total += [1, 3, 8, 20, 50][q]
+		essence_label.text = "预计获得: " + str(total) + " 精华"
+
+	# 装备列表
+	var cols: int = 6
+	var gap: float = 8.0
+	var icon_s: float = 48.0
+	var dy: float = 60.0
+	var checkboxes: Array[CheckBox] = []
 
 	for j in range(equip_instances.size()):
 		var eqp: Dictionary = equip_instances[j]
@@ -1602,17 +1657,17 @@ func _show_dismantle_panel(main_panel: Panel) -> void:
 			continue
 		var col: int = j % cols
 		var row: int = j / cols
-		var x: float = gap + col * (icon_s + gap + 30)
-		var y: float = dy + row * (icon_s + gap + 20)
+		var x: float = gap + col * (icon_s + gap + 26)
+		var y: float = dy + row * (icon_s + gap + 24)
 
-		if y > 330:
+		if y > 340:
 			break
 
 		# 品质框
 		var qclr: Color = _qcolor(eqp.get("quality", 0))
 		var qp: Panel = Panel.new()
 		qp.position = Vector2(x - 1, y - 1)
-		qp.size = Vector2(icon_s+2, icon_s+2)
+		qp.size = Vector2(icon_s + 2, icon_s + 2)
 		var qb := StyleBoxFlat.new()
 		qb.bg_color = Color(1,1,1,0)
 		qb.border_width_left = 2; qb.border_width_right = 2
@@ -1621,43 +1676,85 @@ func _show_dismantle_panel(main_panel: Panel) -> void:
 		qp.add_theme_stylebox_override("panel", qb)
 		dp.add_child(qp)
 
+		var bg: ColorRect = ColorRect.new()
+		bg.position = Vector2(x, y)
+		bg.size = Vector2(icon_s, icon_s)
+		bg.color = Color(0.10, 0.11, 0.18)
+		dp.add_child(bg)
+
 		var eq_icon: Label = Label.new()
 		eq_icon.text = eqp.get("icon", "?")
-		eq_icon.add_theme_font_size_override("font_size", 24)
-		eq_icon.position = Vector2(x + 4, y + 4)
+		eq_icon.add_theme_font_size_override("font_size", 22)
+		eq_icon.position = Vector2(x + 4, y + 2)
 		dp.add_child(eq_icon)
 
-		# 可选复选框
+		# 名字 + 精华数
+		var q: int = eqp.get("quality", 0)
+		var ename: Label = Label.new()
+		ename.text = eqp.get("base_name","?") + "  +" + str([1,3,8,20,50][q])
+		ename.add_theme_font_size_override("font_size", 8)
+		ename.add_theme_color_override("font_color", qclr)
+		ename.position = Vector2(x, y + icon_s + 2)
+		ename.size = Vector2(icon_s, 12)
+		ename.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		dp.add_child(ename)
+
+		# 复选框
 		var cb: CheckBox = CheckBox.new()
-		cb.position = Vector2(x, y + icon_s - 16)
+		cb.position = Vector2(x + 2, y + 2)
 		cb.size = Vector2(14, 14)
+		cb.button_pressed = false
 		var cbi := StyleBoxFlat.new()
-		cbi.bg_color = Color(0.1, 0.1, 0.2)
-		cbi.border_color = Color(0.5, 0.5, 0.6)
+		cbi.bg_color = Color(0.1, 0.1, 0.2, 0.85)
+		cbi.border_width_left = 1; cbi.border_width_right = 1
+		cbi.border_width_top = 1; cbi.border_width_bottom = 1
+		cbi.border_color = Color(0.6, 0.6, 0.6)
+		cbi.set_corner_radius_all(2)
 		cb.add_theme_stylebox_override("normal", cbi)
+		var cbi2 := StyleBoxFlat.new()
+		cbi2.bg_color = Color(0.3, 0.6, 0.3, 0.85)
+		cbi2.border_width_left = 1; cbi2.border_width_right = 1
+		cbi2.border_width_top = 1; cbi2.border_width_bottom = 1
+		cbi2.border_color = Color(0.3, 1.0, 0.3)
+		cbi2.set_corner_radius_all(2)
+		cb.add_theme_stylebox_override("pressed", cbi2)
 		var ej: int = j
 		cb.toggled.connect(func(p: bool):
-			if p: dismantle_targets.append(ej)
-			else: dismantle_targets.erase(ej)
+			if p:
+				dismantle_targets.append(ej)
+			else:
+				dismantle_targets.erase(ej)
+			_update_essence.call()
 		)
 		dp.add_child(cb)
+		checkboxes.append(cb)
+
+	# 全选/取消 联动
+	select_all_btn.pressed.connect(func():
+		for cb in checkboxes:
+			cb.button_pressed = true
+	)
+	deselect_btn.pressed.connect(func():
+		for cb in checkboxes:
+			cb.button_pressed = false
+	)
 
 	# 确认分解
 	var confirm_btn: Button = Button.new()
 	confirm_btn.text = "确认分解"
-	confirm_btn.position = Vector2(12, 340)
+	confirm_btn.position = Vector2(12, 350)
 	confirm_btn.size = Vector2(100, 30)
 	_btn_style_mini(confirm_btn, Color(0.25, 0.1, 0.15))
 	confirm_btn.pressed.connect(func():
+		if dismantle_targets.is_empty():
+			return
 		var total_essence: int = 0
 		var removed: Array[int] = []
 		for ei in dismantle_targets:
 			if ei < 0 or ei >= equip_instances.size():
 				continue
 			var ep: Dictionary = equip_instances[ei]
-			var q: int = ep.get("quality", 0)
-			var essence: int = [1, 3, 8, 20, 50][q]
-			total_essence += essence
+			total_essence += [1, 3, 8, 20, 50][ep.get("quality", 0)]
 			removed.append(ei)
 		removed.sort()
 		for k in range(removed.size() - 1, -1, -1):
