@@ -60,12 +60,16 @@ const GridExecutorCls = preload("res://scripts/grid_executor.gd")
 const InventoryCls = preload("res://scripts/inventory.gd")
 const EquipmentCls = preload("res://scripts/equipment.gd")
 const ItemDBRef = preload("res://scripts/item_db.gd")
+const EquipGenCls = preload("res://scripts/equip_gen.gd")
 
 # 子系统
 var dice: RefCounted
 var executor: RefCounted
 var inventory: RefCounted
 var equipment: RefCounted
+
+# 生成装备实例列表（每件唯一）
+var equip_instances: Array[Dictionary] = []
 
 # 移动动画
 var _moving: bool = false
@@ -485,6 +489,16 @@ func _build_bottom_bar() -> void:
 		btn.add_theme_font_size_override("font_size", 16)
 		bar.add_child(btn)
 
+	# -- 装备测试按钮（左下角） --
+	var test_btn := Button.new()
+	test_btn.name = "TestEquipBtn"
+	test_btn.text = "🔧 生成装备"
+	test_btn.position = Vector2(8, 10)
+	test_btn.size = Vector2(100, 28)
+	_btn_style_mini(test_btn, Color(0.22, 0.15, 0.38))
+	test_btn.pressed.connect(_on_test_generate_equip)
+	bar.add_child(test_btn)
+
 	add_child(bar)
 
 
@@ -549,6 +563,9 @@ func _load_from_save_data(data: Dictionary) -> void:
 		poker_records.append(item as Dictionary)
 	inventory.from_dict(data.get("inventory", []))
 	equipment.from_dict(data.get("equipment", {}))
+	equip_instances.clear()
+	for item in data.get("equip_instances", []):
+		equip_instances.append(EquipGenCls.deserialize(item as Dictionary))
 	# _refresh_poker_slots() 延迟到 _build_top_bar() 之后
 
 
@@ -570,6 +587,7 @@ func _build_save_data() -> Dictionary:
 		"poker_records": poker_records,
 		"inventory": inventory.to_dict(),
 		"equipment": equipment.to_dict(),
+		"equip_instances": equip_instances,
 	}
 
 
@@ -896,6 +914,35 @@ func _show_dice_popup(roll: int, suit: String) -> void:
 
 
 ## ============ 按钮回调 ============
+func _on_test_generate_equip() -> void:
+	var slots: Array[String] = ["weapon","armor","shoes","ring","necklace","cape","helmet","charm"]
+	var slot: String = slots[randi() % slots.size()]
+	var eqp: Dictionary = EquipGenCls.generate(slot, player_level)
+	equip_instances.append(eqp)
+	print("[装备测试] 生成:", EquipGenCls.full_name(eqp), "品质:", eqp["quality_name"], "孔数:", eqp["gem_slots"])
+	_auto_save()
+
+
+## 装备生成装备实例到槽位
+func _on_equip_instance(idx: int) -> void:
+	if idx < 0 or idx >= equip_instances.size():
+		return
+	var eqp: Dictionary = equip_instances[idx]
+	var slot_name: String = eqp.get("slot", "")
+	if slot_name.is_empty():
+		return
+	# 卸下同部位旧装备
+	var old_eidx: int = -1
+	for i in range(equip_instances.size()):
+		if i != idx and equip_instances[i].get("equipped", false) and equip_instances[i].get("slot", "") == slot_name:
+			old_eidx = i
+			break
+	if old_eidx >= 0:
+		equip_instances[old_eidx]["equipped"] = false
+	eqp["equipped"] = true
+	print("[装备] 穿戴:", EquipGenCls.full_name(eqp), "→", slot_name)
+
+
 func _on_bag_pressed() -> void:
 	_show_inventory_panel()
 func _on_skill_pressed()   -> void: print("[主界面] 打开技能")
@@ -977,16 +1024,18 @@ func _show_inventory_panel() -> void:
 		slot_bg.color = Color(0.14, 0.15, 0.22)
 		equip_panel.add_child(slot_bg)
 
-		var item_id: int = equipment.get_slot_item(es["name"])
+		var eqp: Dictionary = equipment.get_slot_item(es["name"])
 		var slot_lbl: Label = Label.new()
 		slot_lbl.name = "EqText_" + es["name"]
-		if item_id > 0:
-			slot_lbl.text = ItemDBRef.get_icon(item_id) + " " + ItemDBRef.get_name(item_id)
-			slot_lbl.add_theme_color_override("font_color", Color(1.0, 0.9, 0.5))
+		if not eqp.is_empty():
+			slot_lbl.text = eqp.get("icon", "?") + " " + eqp.get("base_name", "???")
+			if eqp.get("enhance", 0) > 0:
+				slot_lbl.text += " +" + str(eqp["enhance"])
+			slot_lbl.add_theme_color_override("font_color", eqp.get("quality_color", Color(1, 0.9, 0.5)))
 		else:
 			slot_lbl.text = "[ 空 ]"
 			slot_lbl.add_theme_color_override("font_color", Color(0.3, 0.3, 0.4))
-		slot_lbl.add_theme_font_size_override("font_size", 12)
+		slot_lbl.add_theme_font_size_override("font_size", 11)
 		slot_lbl.position = Vector2(54, ry + 19)
 		equip_panel.add_child(slot_lbl)
 
@@ -997,75 +1046,134 @@ func _show_inventory_panel() -> void:
 	_panel_style(item_panel, Color(0.08, 0.09, 0.13))
 	panel.add_child(item_panel)
 
+	# 标题：消费道具
 	var cnt: int = inventory.get_slot_count()
+	var eqp_cnt: int = equip_instances.size()
 	var item_title: Label = Label.new()
-	item_title.text = "道具 (" + str(cnt) + "/30)"
-	item_title.add_theme_font_size_override("font_size", 14)
+	item_title.text = "消耗品 (" + str(cnt) + ")  |  装备 (" + str(eqp_cnt) + ")"
+	item_title.add_theme_font_size_override("font_size", 13)
 	item_title.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
 	item_title.position = Vector2(10, 8)
 	item_panel.add_child(item_title)
 
+	var dy: float = 32.0
+
+	# === 消耗品 ===
 	for i in range(cnt):
 		var slot: Dictionary = inventory.get_slot(i)
 		var defn: Dictionary = ItemDBRef.get_item(slot["item_id"])
-		var row_y: float = 34.0 + i * 28.0
+		if dy > 390:
+			break
 
 		var icon_lbl: Label = Label.new()
 		icon_lbl.text = defn.get("icon", "?")
-		icon_lbl.add_theme_font_size_override("font_size", 16)
-		icon_lbl.position = Vector2(10, row_y)
+		icon_lbl.add_theme_font_size_override("font_size", 14)
+		icon_lbl.position = Vector2(8, dy)
 		item_panel.add_child(icon_lbl)
 
 		var name_lbl: Label = Label.new()
 		name_lbl.text = defn.get("name", "???") + "  ×" + str(slot["count"])
-		name_lbl.add_theme_font_size_override("font_size", 13)
+		name_lbl.add_theme_font_size_override("font_size", 12)
 		name_lbl.add_theme_color_override("font_color", Color(0.85, 0.85, 0.85))
-		name_lbl.position = Vector2(40, row_y)
+		name_lbl.position = Vector2(34, dy + 1)
 		item_panel.add_child(name_lbl)
 
-		var type_lbl: Label = Label.new()
-		var tname: String = "消耗"
-		match defn.get("type", 0):
-			TYPE_WEAPON:    tname = "武器"
-			TYPE_ARMOR:     tname = "防具"
-			TYPE_SHOES:     tname = "鞋子"
-			TYPE_RING:      tname = "戒指"
-			TYPE_NECKLACE:  tname = "项链"
-			TYPE_CAPE:      tname = "披风"
-			TYPE_HELMET:    tname = "头盔"
-			TYPE_CHARM:     tname = "护符"
-			TYPE_MATERIAL:  tname = "材料"
-		type_lbl.text = "[" + tname + "]"
-		type_lbl.add_theme_font_size_override("font_size", 11)
-		type_lbl.add_theme_color_override("font_color", Color(0.4, 0.5, 0.7))
-		type_lbl.position = Vector2(200, row_y + 2)
-		item_panel.add_child(type_lbl)
-
-		# 使用/装备按钮
 		var btn: Button = Button.new()
-		var itype_int: int = defn.get("type", 0)
-		var is_equip: bool = (itype_int >= TYPE_WEAPON and itype_int <= TYPE_CHARM)
-		btn.text = "装备" if is_equip else "使用"
-		btn.position = Vector2(260, row_y - 2)
-		btn.size = Vector2(50, 22)
-		btn.add_theme_font_size_override("font_size", 11)
+		btn.text = "使用"
+		btn.position = Vector2(200, dy - 1)
+		btn.size = Vector2(44, 20)
+		btn.add_theme_font_size_override("font_size", 10)
 		_btn_style_mini(btn, Color(0.18, 0.25, 0.40))
-		var idx: int = i
-		btn.pressed.connect(func():
-			_on_item_action(idx)
-			panel.queue_free()
-			_show_inventory_panel()  # 刷新面板
-		)
 		item_panel.add_child(btn)
+
+		dy += 22.0
+
+	# === 生成装备 ===
+	for j in range(equip_instances.size()):
+		var eqp: Dictionary = equip_instances[j]
+		if dy > 390:
+			break
+
+		var qclr: Color = eqp.get("quality_color", Color.GRAY)
+
+		# 行背景
+		var row_bg: ColorRect = ColorRect.new()
+		row_bg.position = Vector2(4, dy - 2)
+		row_bg.size = Vector2(660, 52)
+		row_bg.color = Color(0.08, 0.09, 0.14)
+		item_panel.add_child(row_bg)
+
+		# 图标 + 品质标记
+		var qdot: ColorRect = ColorRect.new()
+		qdot.position = Vector2(8, dy + 4)
+		qdot.size = Vector2(4, 36)
+		qdot.color = qclr
+		item_panel.add_child(qdot)
+
+		var eq_icon: Label = Label.new()
+		eq_icon.text = eqp.get("icon", "?")
+		eq_icon.add_theme_font_size_override("font_size", 20)
+		eq_icon.position = Vector2(16, dy + 4)
+		item_panel.add_child(eq_icon)
+
+		# 名称 + 主属性
+		var eq_name: Label = Label.new()
+		var qname: String = eqp.get("quality_name", "?")
+		eq_name.text = "[" + qname + "] " + eqp.get("base_name","?") + " +" + str(eqp.get("enhance",0))
+		eq_name.add_theme_font_size_override("font_size", 13)
+		eq_name.add_theme_color_override("font_color", qclr)
+		eq_name.position = Vector2(48, dy)
+		item_panel.add_child(eq_name)
+
+		var eq_main: Label = Label.new()
+		eq_main.text = eqp.get("main_stat","") + " " + str(eqp.get("main_value",0))
+		eq_main.add_theme_font_size_override("font_size", 11)
+		eq_main.add_theme_color_override("font_color", Color(0.7, 0.75, 0.8))
+		eq_main.position = Vector2(48, dy + 17)
+		item_panel.add_child(eq_main)
+
+		# 宝石槽位
+		var gem_str: String = ""
+		for k in range(eqp.get("gem_slots", 0)):
+			var gid: int = eqp["gems"][k] if k < eqp["gems"].size() else 0
+			if gid > 0:
+				var gdef: Dictionary = EquipData.GEM_DEFS.get(gid, {})
+				gem_str += gdef.get("icon", "🔘")
+			else:
+				gem_str += "○"
+		if gem_str.is_empty():
+			gem_str = "无宝石"
+		var gem_lbl: Label = Label.new()
+		gem_lbl.text = gem_str
+		gem_lbl.add_theme_font_size_override("font_size", 12)
+		gem_lbl.position = Vector2(48, dy + 33)
+		item_panel.add_child(gem_lbl)
+
+		# 装备按钮
+		var eqp_btn: Button = Button.new()
+		eqp_btn.text = "装备"
+		eqp_btn.position = Vector2(620, dy + 6)
+		eqp_btn.size = Vector2(36, 20)
+		eqp_btn.add_theme_font_size_override("font_size", 10)
+		_btn_style_mini(eqp_btn, Color(0.15, 0.28, 0.40))
+		var ej: int = j
+		eqp_btn.pressed.connect(func():
+			_on_equip_instance(ej)
+			panel.queue_free()
+			_show_inventory_panel()
+		)
+		item_panel.add_child(eqp_btn)
+
+		dy += 56.0
 
 	# 关闭按钮
 	var close_btn: Button = Button.new()
 	close_btn.text = "✕ 关闭"
-	close_btn.position = Vector2(460, 490)
-	close_btn.size = Vector2(80, 30)
+	close_btn.position = Vector2(480, 4)
+	close_btn.size = Vector2(70, 24)
 	_btn_style_mini(close_btn, Color(0.25, 0.15, 0.15))
 	close_btn.pressed.connect(panel.queue_free)
-	panel.add_child(close_btn)
+	item_panel.add_child(close_btn)
 
 	add_child(panel)
 

@@ -1,24 +1,23 @@
 class_name Equipment
 extends RefCounted
 ## ============================================================
-## Equipment - 装备栏管理 v0.2
+## Equipment - 装备栏管理 v0.3
 ## 8 槽位：武器·防具·鞋子·戒指·项链·披风·头盔·护符
+## 存储完整装备实例（非 item_id）
 ## ============================================================
-
-const ItemDBRef = preload("res://scripts/item_db.gd")
 
 signal equipment_changed
 
-# 装备槽 key → type_id（与 ItemDB enum 对齐）
-var _slots: Dictionary = {
-	"weapon":    0,  # type=1
-	"armor":     0,  # type=2
-	"shoes":     0,  # type=3
-	"ring":      0,  # type=4
-	"necklace":  0,  # type=5
-	"cape":      0,  # type=6
-	"helmet":    0,  # type=7
-	"charm":     0,  # type=8
+# 装备槽数据: key=slot_name, value=装备实例字典 (空={})
+var _equipped: Dictionary = {
+	"weapon":    {},
+	"armor":     {},
+	"shoes":     {},
+	"ring":      {},
+	"necklace":  {},
+	"cape":      {},
+	"helmet":    {},
+	"charm":     {},
 }
 
 const SLOT_TYPE: Dictionary = {
@@ -33,49 +32,47 @@ const SLOT_TYPE: Dictionary = {
 }
 
 
-func equip(slot_name: String, item_id: int) -> bool:
-	if not _slots.has(slot_name):
+## 穿戴装备实例
+func equip_instance(slot_name: String, eqp: Dictionary) -> bool:
+	if not _equipped.has(slot_name):
 		return false
-	var defn: Dictionary = ItemDBRef.get_item(item_id)
-	if defn.is_empty():
+	if eqp.is_empty():
 		return false
-	if defn["type"] != SLOT_TYPE.get(slot_name, -1):
-		return false
-	_slots[slot_name] = item_id
+	_equipped[slot_name] = eqp.duplicate(true)
 	equipment_changed.emit()
 	return true
 
 
-func unequip(slot_name: String) -> int:
-	if not _slots.has(slot_name):
-		return 0
-	var old_id: int = _slots[slot_name]
-	_slots[slot_name] = 0
+## 卸下装备
+func unequip(slot_name: String) -> Dictionary:
+	if not _equipped.has(slot_name):
+		return {}
+	var old: Dictionary = _equipped[slot_name].duplicate(true)
+	_equipped[slot_name] = {}
 	equipment_changed.emit()
-	return old_id
+	return old
 
 
-func get_slot_item(slot_name: String) -> int:
-	return _slots.get(slot_name, 0)
+## 获取槽位装备
+func get_slot_item(slot_name: String) -> Dictionary:
+	return _equipped.get(slot_name, {})
 
 
-func get_stat_bonuses() -> Dictionary:
-	var bonuses: Dictionary = {}
-	for slot_name in _slots:
-		var item_id: int = _slots[slot_name]
-		if item_id <= 0:
-			continue
-		var defn: Dictionary = ItemDBRef.get_item(item_id)
-		var stats: Dictionary = defn.get("stats", {})
-		for key in stats:
-			bonuses[key] = bonuses.get(key, 0) + stats[key]
-	return bonuses
+## 已装备实例的显示文本（用于装备面板）
+func get_slot_display(slot_name: String) -> String:
+	var eqp: Dictionary = _equipped.get(slot_name, {})
+	if eqp.is_empty():
+		return "[ 空 ]"
+	var s: String = eqp.get("icon", "?") + " " + eqp.get("base_name", "???")
+	if eqp.get("enhance", 0) > 0:
+		s += " +" + str(eqp["enhance"])
+	return s
 
 
 func to_dict() -> Dictionary:
-	return _slots.duplicate()
+	return _equipped.duplicate(true)
 
 
 func from_dict(data: Dictionary) -> void:
-	for key in _slots:
-		_slots[key] = data.get(key, 0)
+	for key in _equipped:
+		_equipped[key] = data.get(key, {}).duplicate(true) if data.has(key) else {}
