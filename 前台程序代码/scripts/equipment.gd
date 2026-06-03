@@ -75,4 +75,8 @@ func to_dict() -> Dictionary:
 
 func from_dict(data: Dictionary) -> void:
 	for key in _equipped:
-		_equipped[key] = data.get(key, {}).duplicate(true) if data.has(key) else {}
+		var v = data.get(key, {})
+		if v is Dictionary:
+			_equipped[key] = v.duplicate(true)
+		else:
+			_equipped[key] = {}
