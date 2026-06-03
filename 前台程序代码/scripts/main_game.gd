@@ -70,6 +70,7 @@ var equipment: RefCounted
 
 # 生成装备实例列表（每件唯一）
 var equip_instances: Array[Dictionary] = []
+var _tooltip_nodes: Array[Node] = []  # 当前打开的 tooltip 列表
 
 # 移动动画
 var _moving: bool = false
@@ -914,6 +915,12 @@ func _show_dice_popup(roll: int, suit: String) -> void:
 
 
 ## ============ 按钮回调 ============
+func _close_all_tooltips() -> void:
+	for t in _tooltip_nodes:
+		if is_instance_valid(t):
+			t.queue_free()
+	_tooltip_nodes.clear()
+
 func _on_test_generate_equip() -> void:
 	var slots: Array[String] = ["weapon","armor","shoes","ring","necklace","cape","helmet","charm"]
 	var slot: String = slots[randi() % slots.size()]
@@ -1070,6 +1077,7 @@ func _show_inventory_panel() -> void:
 			_btn_transparent2(slot_btn)
 			var esn: String = es["name"]
 			slot_btn.pressed.connect(func():
+				_close_all_tooltips()
 				_show_equip_tooltip(eqp, -1, esn, panel)
 			)
 			equip_panel.add_child(slot_btn)
@@ -1211,9 +1219,9 @@ func _build_equip_tab(area: Panel, main_panel: Panel) -> void:
 		var col: int = i % cols
 		var row: int = i / cols
 		var x: float = gap + col * (icon_s + gap)
-		var y: float = gap + row * (icon_s + gap + 16)
+		var y: float = gap + row * (icon_s + gap + 22)
 
-		if y > 370:
+		if y > 360:
 			break
 
 		# 品质边框
@@ -1239,43 +1247,61 @@ func _build_equip_tab(area: Panel, main_panel: Panel) -> void:
 		# 图标
 		var icon: Label = Label.new()
 		icon.text = eqp.get("icon", "?")
-		icon.add_theme_font_size_override("font_size", 24)
-		icon.position = Vector2(x + 4, y + 4)
+		icon.add_theme_font_size_override("font_size", 22)
+		icon.position = Vector2(x + 2, y)
 		area.add_child(icon)
 
-		# 强化等级
+		# 名称（品质色）
+		var ename: Label = Label.new()
+		var short_name: String = eqp.get("base_name", "???")
 		if eqp.get("enhance", 0) > 0:
-			var ehl: Label = Label.new()
-			ehl.text = "+" + str(eqp["enhance"])
-			ehl.add_theme_font_size_override("font_size", 9)
-			ehl.add_theme_color_override("font_color", Color(1, 0.85, 0.2))
-			ehl.position = Vector2(x + 2, y + icon_s - 12)
-			area.add_child(ehl)
+			ename.text = short_name.substr(0, 3) + "+" + str(eqp["enhance"])
+		else:
+			ename.text = short_name.substr(0, 4)
+		ename.add_theme_font_size_override("font_size", 9)
+		ename.add_theme_color_override("font_color", qclr)
+		ename.position = Vector2(x, y + icon_s + 2)
+		ename.size = Vector2(icon_s, 12)
+		ename.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		area.add_child(ename)
 
 		# 点击 → tooltip
 		var btn: Button = Button.new()
 		btn.flat = true
 		btn.position = Vector2(x, y)
-		btn.size = Vector2(icon_s, icon_s)
+		btn.size = Vector2(icon_s, icon_s + 16)
 		_btn_transparent2(btn)
 		var eidx: int = ei
 		btn.pressed.connect(func():
-			_show_equip_tooltip(equip_instances[eidx], eidx, "", main_panel)
+			_close_all_tooltips()
+			# 检查是否有同部位已装备
+			var slot: String = eqp.get("slot", "")
+			var equipped: Dictionary = equipment.get_slot_item(slot)
+			if not equipped.is_empty():
+				_show_compare_tooltips(eqp, equipped, slot, main_panel)
+			else:
+				_show_equip_tooltip(eqp, eidx, "", main_panel)
 		)
 		area.add_child(btn)
 
 
 ## 装备完整 tooltip
-func _show_equip_tooltip(eqp: Dictionary, idx: int, slot_name: String, main_panel: Panel) -> void:
-	var old: Node = main_panel.get_node_or_null("EquipTooltip")
-	if old:
-		old.queue_free()
-
+func _show_equip_tooltip(eqp: Dictionary, idx: int, slot_name: String, main_panel: Panel, x_pos: float = 340.0) -> void:
 	var tip: Panel = Panel.new()
 	tip.name = "EquipTooltip"
-	tip.position = Vector2(340, 60)
+	tip.position = Vector2(x_pos, 60)
 	tip.size = Vector2(340, 340)
 	_panel_style(tip, Color(0.06, 0.07, 0.14, 0.97))
+	_tooltip_nodes.append(tip)
+
+	# 点击 tip 外部关闭
+	var bg_btn: Button = Button.new()
+	bg_btn.flat = true
+	bg_btn.position = Vector2(0, 0)
+	bg_btn.size = tip.size
+	_btn_transparent2(bg_btn)
+	bg_btn.pressed.connect(func(): _close_all_tooltips())
+	tip.add_child(bg_btn)
 
 	var sy: float = 8.0
 	var qclr: Color = eqp.get("quality_color", Color.GRAY)
@@ -1287,6 +1313,15 @@ func _show_equip_tooltip(eqp: Dictionary, idx: int, slot_name: String, main_pane
 	qbar.size = Vector2(340, 3)
 	qbar.color = qclr
 	tip.add_child(qbar)
+
+	# 是否已装备标记
+	if not slot_name.is_empty():
+		var badge: Label = Label.new()
+		badge.text = "【装备中】"
+		badge.add_theme_font_size_override("font_size", 10)
+		badge.add_theme_color_override("font_color", Color(0.3, 1.0, 0.5))
+		badge.position = Vector2(265, sy)
+		tip.add_child(badge)
 
 	# 名称 + 强化
 	var name_lbl: Label = Label.new()
@@ -1321,7 +1356,7 @@ func _show_equip_tooltip(eqp: Dictionary, idx: int, slot_name: String, main_pane
 	var main_lbl: Label = Label.new()
 	main_lbl.text = eqp.get("main_stat", "") + ": " + str(eqp.get("main_value", 0))
 	if eqp.get("enhance", 0) > 0:
-		var enhance_bonus: float = eqp["main_value"] * (eqp["enhance"] * 0.03)  # 每级3%
+		var enhance_bonus: float = eqp["main_value"] * (eqp["enhance"] * 0.03)
 		main_lbl.text += "  (+" + str(snapped(enhance_bonus, 0.1)) + " 强化)"
 	main_lbl.add_theme_font_size_override("font_size", 13)
 	main_lbl.add_theme_color_override("font_color", Color(1.0, 0.9, 0.3))
@@ -1378,7 +1413,6 @@ func _show_equip_tooltip(eqp: Dictionary, idx: int, slot_name: String, main_pane
 	# 底部按钮
 	var btn_y: float = 305
 	if idx >= 0:
-		# 背包中的装备：显示"装备"
 		var equip_btn: Button = Button.new()
 		equip_btn.text = "装备"
 		equip_btn.position = Vector2(12, btn_y)
@@ -1386,13 +1420,13 @@ func _show_equip_tooltip(eqp: Dictionary, idx: int, slot_name: String, main_pane
 		_btn_style_mini(equip_btn, Color(0.15, 0.28, 0.45))
 		var eid: int = idx
 		equip_btn.pressed.connect(func():
+			_close_all_tooltips()
 			_on_equip_instance(eid)
 			main_panel.queue_free()
 			_show_inventory_panel()
 		)
 		tip.add_child(equip_btn)
 	elif not slot_name.is_empty():
-		# 已装备：显示"卸下"
 		var unequip_btn: Button = Button.new()
 		unequip_btn.text = "卸下"
 		unequip_btn.position = Vector2(12, btn_y)
@@ -1400,22 +1434,36 @@ func _show_equip_tooltip(eqp: Dictionary, idx: int, slot_name: String, main_pane
 		_btn_style_mini(unequip_btn, Color(0.35, 0.12, 0.12))
 		var esn: String = slot_name
 		unequip_btn.pressed.connect(func():
+			_close_all_tooltips()
 			_on_unequip_instance(esn)
 			main_panel.queue_free()
 			_show_inventory_panel()
 		)
 		tip.add_child(unequip_btn)
 
-	# 关闭tooltip
 	var close_tip: Button = Button.new()
 	close_tip.text = "✕"
 	close_tip.position = Vector2(300, btn_y)
 	close_tip.size = Vector2(28, 26)
 	_btn_style_mini(close_tip, Color(0.2, 0.1, 0.1))
-	close_tip.pressed.connect(tip.queue_free)
+	close_tip.pressed.connect(func(): tip.queue_free(); _tooltip_nodes.erase(tip))
 	tip.add_child(close_tip)
 
 	main_panel.add_child(tip)
+
+
+## 对比 tooltips（背包装备 + 已装备同部位）
+func _show_compare_tooltips(bag_eqp: Dictionary, wear_eqp: Dictionary, slot: String, main_panel: Panel) -> void:
+	# 背包的在左边，已装备的在右边
+	_show_equip_tooltip(bag_eqp, _find_instance_idx(bag_eqp), "", main_panel, 320.0)
+	_show_equip_tooltip(wear_eqp, -1, slot, main_panel, 670.0)
+
+
+func _find_instance_idx(eqp: Dictionary) -> int:
+	for i in range(equip_instances.size()):
+		if equip_instances[i].get("uid", -1) == eqp.get("uid", -1):
+			return i
+	return -1
 
 
 ## 卸下装备
