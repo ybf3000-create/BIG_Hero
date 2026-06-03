@@ -38,6 +38,26 @@ static var MAIN_BASE: Dictionary = {
 # 品质系数
 static var QUALITY_COEF: Array[float] = [1.0, 1.2, 1.5, 2.0, 3.0]
 
+# 套装池（13套）
+static var SET_POOL: Array[Dictionary] = [
+	{ "name": "龙鳞", "pos": "坦克" },
+	{ "name": "烈焰", "pos": "群伤" },
+	{ "name": "冰霜", "pos": "控制" },
+	{ "name": "雷霆", "pos": "爆发" },
+	{ "name": "疾风", "pos": "攻速" },
+	{ "name": "铁壁", "pos": "格挡" },
+	{ "name": "暗影", "pos": "暗杀" },
+	{ "name": "自然", "pos": "治疗" },
+	{ "name": "引力", "pos": "刷宝" },
+	{ "name": "星辰", "pos": "技能" },
+	{ "name": "幻影", "pos": "闪避" },
+	{ "name": "口才", "pos": "跳过" },
+	{ "name": "奢侈", "pos": "扣钱" },
+]
+
+# 套装品质修正（概率乘数）
+static var SET_QUALITY_MOD: Array[float] = [1.5, 1.2, 1.0, 0.7, 0.4]
+
 # 附加词条池
 static var AFFIX_POOL: Array[Dictionary] = [
 	{ "name": "攻击%",     "type": "attack",  "min": 3.0,  "max": 15.0, "fmt": "+%.0f%%" },
@@ -140,6 +160,12 @@ static func generate(slot_name: String, level: int = 1) -> Dictionary:
 	if gs["max"] > 0:
 		gem_slots = randi_range(gs["min"], gs["max"])
 
+	# 5.5 套装判定（3% + 幸运×0.3%）× 品质修正
+	var suit_name: String = ""
+	var set_rate: float = (3.0 + 0.0 * 0.3) * SET_QUALITY_MOD[quality] / 100.0  # 幸运=0 默认
+	if randf() < set_rate:
+		suit_name = SET_POOL[randi() % SET_POOL.size()]["name"]
+
 	# 6. 组装
 	var uid: int = _next_uid
 	_next_uid += 1
@@ -159,7 +185,7 @@ static func generate(slot_name: String, level: int = 1) -> Dictionary:
 		"gems": [] as Array[int],
 		"gem_slots": gem_slots,
 		"enhance": 0,
-		"suit_name": "",
+		"suit_name": suit_name,
 		"suit_count": 0,
 	}
 

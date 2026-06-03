@@ -917,6 +917,22 @@ func _show_dice_popup(roll: int, suit: String) -> void:
 ## ============ 按钮回调 ============
 func _qcolor(q: int) -> Color:
 	return EquipData.QUALITY_COLORS.get(q, Color.GRAY)
+
+
+## 统计已装备中各套装的件数
+func _count_equipped_suits() -> Dictionary:
+	var counts: Dictionary = {}
+	for ei in range(equip_instances.size()):
+		var ep: Dictionary = equip_instances[ei]
+		if not ep.get("equipped", false):
+			continue
+		var sn: String = ep.get("suit_name", "")
+		if sn.is_empty():
+			continue
+		counts[sn] = counts.get(sn, 0) + 1
+	return counts
+
+func _close_all_tooltips() -> void:
 	for t in _tooltip_nodes:
 		if is_instance_valid(t):
 			t.queue_free()
@@ -1070,6 +1086,29 @@ func _show_inventory_panel() -> void:
 				eh.position = Vector2(103, ry + 34)
 				equip_panel.add_child(eh)
 
+			# 套装标记
+			var suit: String = eqp.get("suit_name", "")
+			if not suit.is_empty():
+				var st: Label = Label.new()
+				st.text = suit.substr(0, 2)
+				st.add_theme_font_size_override("font_size", 8)
+				st.add_theme_color_override("font_color", Color(0.3, 1.0, 0.6))
+				st.position = Vector2(103, ry + 2)
+				equip_panel.add_child(st)
+
+			# 宝石标记
+			var gem_s: int = eqp.get("gem_slots", 0)
+			if gem_s > 0:
+				var gem_filled: int = 0
+				for gv in eqp.get("gems", []):
+					if gv > 0: gem_filled += 1
+				var gt: Label = Label.new()
+				gt.text = "◆" + str(gem_filled) + "/" + str(gem_s)
+				gt.add_theme_font_size_override("font_size", 8)
+				gt.add_theme_color_override("font_color", Color(0.8, 0.5, 1.0))
+				gt.position = Vector2(103, ry + 14)
+				equip_panel.add_child(gt)
+
 			# 点击已装备 → 显示tips(含卸下按钮)
 			var slot_btn: Button = Button.new()
 			slot_btn.flat = true
@@ -1082,6 +1121,20 @@ func _show_inventory_panel() -> void:
 				_show_equip_tooltip(eqp, -1, esn, panel)
 			)
 			equip_panel.add_child(slot_btn)
+
+	# 套装统计
+	var suit_counts: Dictionary = _count_equipped_suits()
+	if not suit_counts.is_empty():
+		var ssy: float = 38.0 + 8 * 40.0 + 12
+		var suit_line: Label = Label.new()
+		var stxt: String = "套装:"
+		for sk in suit_counts:
+			stxt += " " + sk + "×" + str(suit_counts[sk])
+		suit_line.text = stxt
+		suit_line.add_theme_font_size_override("font_size", 10)
+		suit_line.add_theme_color_override("font_color", Color(0.3, 1.0, 0.6))
+		suit_line.position = Vector2(12, ssy)
+		equip_panel.add_child(suit_line)
 
 	# 道具区域（右侧）
 	var item_area: Panel = Panel.new()
@@ -1334,6 +1387,23 @@ func _show_equip_tooltip(eqp: Dictionary, idx: int, slot_name: String, main_pane
 	name_lbl.position = Vector2(12, sy)
 	tip.add_child(name_lbl)
 	sy += 24
+
+	# 套装信息
+	var suit: String = eqp.get("suit_name", "")
+	if not suit.is_empty():
+		var suit_counts: Dictionary = _count_equipped_suits()
+		var scnt: int = suit_counts.get(suit, 0)
+		var sl: Label = Label.new()
+		sl.text = "套装: " + suit + "  (" + str(scnt) + "/4)"
+		if scnt >= 4:
+			sl.text += "  ●已激活"
+		elif scnt >= 2:
+			sl.text += "  ●2件效果"
+		sl.add_theme_font_size_override("font_size", 12)
+		sl.add_theme_color_override("font_color", Color(0.3, 1.0, 0.6))
+		sl.position = Vector2(12, sy)
+		tip.add_child(sl)
+		sy += 18
 
 	# 装备等级
 	var lv_lbl: Label = Label.new()
