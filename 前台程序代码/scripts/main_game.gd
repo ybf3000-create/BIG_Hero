@@ -70,7 +70,9 @@ var equipment: RefCounted
 
 # 生成装备实例列表（每件唯一）
 var equip_instances: Array[Dictionary] = []
+var gem_bag: Array[Dictionary] = []   # [{gem_id, level, count}]
 var _tooltip_nodes: Array[Node] = []  # 当前打开的 tooltip 列表
+var _float_text_node: Label             # 当前飘字
 
 # 移动动画
 var _moving: bool = false
@@ -928,6 +930,34 @@ func _qcolor(q: int) -> Color:
 	return EquipData.QUALITY_COLORS.get(q, Color.GRAY)
 
 
+## 通用飘字提示
+## 画面正中偏上，渐入上浮渐出，3秒消失，新提示顶替旧提示
+func _show_float_text(text: String, clr: Color = Color.WHITE) -> void:
+	if _float_text_node and is_instance_valid(_float_text_node):
+		_float_text_node.queue_free()
+	var lbl: Label = Label.new()
+	lbl.text = text
+	lbl.add_theme_font_size_override("font_size", 22)
+	lbl.add_theme_color_override("font_color", clr)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.position = Vector2((1280 - len(text) * 14) / 2.0, 280)
+	lbl.size = Vector2(len(text) * 14, 30)
+	lbl.modulate.a = 0.0
+	add_child(lbl)
+	_float_text_node = lbl
+
+	var tw := create_tween()
+	tw.set_parallel(false)
+	tw.tween_property(lbl, "modulate:a", 1.0, 0.2)
+	tw.tween_property(lbl, "position:y", 240, 1.8)
+	tw.parallel().tween_property(lbl, "modulate:a", 0.0, 1.8)
+	tw.tween_callback(func():
+		if _float_text_node == lbl:
+			_float_text_node = null
+		lbl.queue_free()
+	)
+
+
 ## 统计已装备中各套装的件数
 func _count_equipped_suits() -> Dictionary:
 	var counts: Dictionary = {}
@@ -962,8 +992,36 @@ func _on_test_generate_equip() -> void:
 
 func _on_test_generate_gem() -> void:
 	var gid: int = randi_range(1, 8)
+	_add_gem(gid, 1, 1)
 	var gdef: Dictionary = EquipData.GEM_DEFS.get(gid, {})
-	print("[宝石测试] 生成:", gdef.get("name", "???"), "Lv.1")
+	_show_float_text(gdef.get("icon", "🔘") + " " + gdef.get("name", "???") + " Lv.1", Color(1, 0.7, 0.3))
+
+
+## 添加宝石到背包
+func _add_gem(gid: int, lv: int, cnt: int) -> void:
+	for g in gem_bag:
+		if g["id"] == gid and g["level"] == lv:
+			g["count"] += cnt
+			return
+	gem_bag.append({ "id": gid, "level": lv, "count": cnt })
+
+
+## 宝石合成：右键同等级宝石
+func _synthesize_gem(gid: int, lv: int) -> void:
+	var idx: int = -1
+	for i in range(gem_bag.size()):
+		if gem_bag[i]["id"] == gid and gem_bag[i]["level"] == lv:
+			idx = i
+			break
+	if idx < 0 or gem_bag[idx]["count"] < 3:
+		_show_float_text("需要3颗同等级宝石才能合成", Color(1, 0.4, 0.4))
+		return
+	gem_bag[idx]["count"] -= 3
+	if gem_bag[idx]["count"] <= 0:
+		gem_bag.remove_at(idx)
+	_add_gem(gid, lv + 1, 1)
+	var gdef: Dictionary = EquipData.GEM_DEFS.get(gid, {})
+	_show_float_text(gdef.get("icon", "🔘") + " 合成 → Lv." + str(lv + 1), Color(0.3, 1.0, 0.6))
 
 
 func _on_bag_pressed() -> void:
@@ -1162,9 +1220,14 @@ func _show_inventory_panel() -> void:
 				slot_btn.size = Vector2(50, 50)
 				_btn_transparent2(slot_btn)
 				var esn: String = es["name"]
-				slot_btn.pressed.connect(func():
-					_close_all_tooltips()
-					_show_equip_tooltip(eqp, -1, esn, panel)
+				slot_btn.button_down.connect(func():
+					if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+						_on_unequip_instance(esn)
+						panel.queue_free()
+						_show_inventory_panel()
+					else:
+						_close_all_tooltips()
+						_show_equip_tooltip(eqp, -1, esn, panel)
 				)
 				equip_panel.add_child(slot_btn)
 
@@ -1489,22 +1552,26 @@ func _build_equip_tab(area: Panel, main_panel: Panel) -> void:
 		ename.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		area.add_child(ename)
 
-		# 点击 → tooltip
+		# 点击 → tooltip / 右键快速装备
 		var btn: Button = Button.new()
 		btn.flat = true
 		btn.position = Vector2(x, y)
 		btn.size = Vector2(icon_s, icon_s + 16)
 		_btn_transparent2(btn)
 		var eidx: int = ei
-		btn.pressed.connect(func():
-			_close_all_tooltips()
-			# 检查是否有同部位已装备
-			var slot: String = eqp.get("slot", "")
-			var equipped: Dictionary = equipment.get_slot_item(slot)
-			if not equipped.is_empty():
-				_show_compare_tooltips(eqp, equipped, slot, main_panel)
+		btn.button_down.connect(func():
+			if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+				_on_equip_instance(eidx)
+				main_panel.queue_free()
+				_show_inventory_panel()
 			else:
-				_show_equip_tooltip(eqp, eidx, "", main_panel)
+				_close_all_tooltips()
+				var s: String = eqp.get("slot", "")
+				var weq: Dictionary = equipment.get_slot_item(s)
+				if not weq.is_empty():
+					_show_compare_tooltips(eqp, weq, s, main_panel)
+				else:
+					_show_equip_tooltip(eqp, eidx, "", main_panel)
 		)
 		area.add_child(btn)
 
