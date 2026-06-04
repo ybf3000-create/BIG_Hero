@@ -490,11 +490,20 @@ func _build_bottom_bar() -> void:
 		btn.add_theme_font_size_override("font_size", 16)
 		bar.add_child(btn)
 
+	# -- 宝石测试按钮 --
+	var gem_btn := Button.new()
+	gem_btn.text = "💎 生成宝石"
+	gem_btn.position = Vector2(8, 8)
+	gem_btn.size = Vector2(100, 28)
+	_btn_style_mini(gem_btn, Color(0.38, 0.12, 0.38))
+	gem_btn.pressed.connect(_on_test_generate_gem)
+	bar.add_child(gem_btn)
+
 	# -- 装备测试按钮（左下角） --
 	var test_btn := Button.new()
 	test_btn.name = "TestEquipBtn"
 	test_btn.text = "🔧 生成装备"
-	test_btn.position = Vector2(8, 10)
+	test_btn.position = Vector2(116, 8)
 	test_btn.size = Vector2(100, 28)
 	_btn_style_mini(test_btn, Color(0.22, 0.15, 0.38))
 	test_btn.pressed.connect(_on_test_generate_equip)
@@ -951,6 +960,12 @@ func _on_test_generate_equip() -> void:
 	_auto_save()
 
 
+func _on_test_generate_gem() -> void:
+	var gid: int = randi_range(1, 8)
+	var gdef: Dictionary = EquipData.GEM_DEFS.get(gid, {})
+	print("[宝石测试] 生成:", gdef.get("name", "???"), "Lv.1")
+
+
 func _on_bag_pressed() -> void:
 	_show_inventory_panel()
 func _on_skill_pressed()   -> void: print("[主界面] 打开技能")
@@ -963,8 +978,8 @@ func _on_settings_pressed()-> void:
 
 ## ============ 背包 UI 面板 (重制版) ============
 var _inv_tab: String = "equip"   # "consume" | "equip"
-var _inv_filter_quality: int = -1   # -1=全部, 0~4=品质
-var _inv_filter_slot: int = -1      # -1=全部, 0~7=部位
+var _inv_filter_quality: Array[int] = []   # 空=全部, 选中多个
+var _inv_filter_slot: Array[int] = []       # 空=全部, 选中多个
 
 func _show_inventory_panel() -> void:
 	# 已打开→关闭
@@ -1018,10 +1033,16 @@ func _show_inventory_panel() -> void:
 		tb.flat = true
 		var tid: String = tabs[ti]["id"]
 		tb.pressed.connect(func():
+			if _inv_tab == tid:
+				return
 			_inv_tab = tid
-			panel.queue_free()
-			_show_inventory_panel()
+			# 重建 tab 按钮样式
+			for c in panel.get_children():
+				if c is Button and c.has_meta("tab_id"):
+					_restyle_tab(c, c.get_meta("tab_id") == _inv_tab)
+			_refresh_item_area(panel)
 		)
+		tb.set_meta("tab_id", tid)
 		panel.add_child(tb)
 
 	# 装备栏（左侧）
@@ -1243,10 +1264,100 @@ func _show_inventory_panel() -> void:
 
 
 ## 刷新物品区域（不关面板）
-func _refresh_item_area(main_panel: Panel) -> void:
+func _restyle_tab(tb: Button, active: bool) -> void:
+	if active:
+		var ta := StyleBoxFlat.new()
+		ta.bg_color = Color(0.15, 0.18, 0.28)
+		ta.set_content_margin_all(4)
+		ta.border_width_bottom = 3
+		ta.border_color = Color(0.3, 0.6, 1.0)
+		tb.add_theme_stylebox_override("normal", ta)
+		tb.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0))
+	else:
+		var ta2 := StyleBoxFlat.new()
+		ta2.bg_color = Color(0.08, 0.09, 0.15)
+		ta2.set_content_margin_all(4)
+		tb.add_theme_stylebox_override("normal", ta2)
+		tb.add_theme_color_override("font_color", Color(0.4, 0.45, 0.5))
+
+func _rebuild_filters(item_area: Panel, main_panel: Panel) -> void:
+	# 清除旧过滤按钮（保留 ItemContent）
+	for c in item_area.get_children():
+		if c.get("name") != "ItemContent":
+			c.queue_free()
+
+	var qlabels: Array[String] = ["全部", "灰", "绿", "蓝", "紫", "橙"]
+	var qclrvals: Array[Color] = [Color(0.5,0.5,0.5), Color(0.6,0.6,0.6), Color(0.2,0.8,0.2), Color(0.2,0.4,1.0), Color(0.7,0.2,1.0), Color(1.0,0.6,0.1)]
+	for qi in range(qlabels.size()):
+		var qb: Button = Button.new()
+		qb.text = qlabels[qi]
+		qb.position = Vector2(4 + qi * 68, 4)
+		qb.size = Vector2(60, 24)
+		qb.add_theme_font_size_override("font_size", 12)
+		var qv: int = qi - 1
+		var selected: bool = (qv == -1 and _inv_filter_quality.is_empty()) or _inv_filter_quality.has(qv)
+		var clr: Color = qclrvals[qi]
+		_btn_style_mini(qb, clr.darkened(0.5) if not selected else clr)
+		if qi == 0:
+			qb.add_theme_color_override("font_color", Color.WHITE)
+		else:
+			qb.add_theme_color_override("font_color", clr if selected else clr.darkened(0.5))
+		qb.pressed.connect(func():
+			if qv == -1:
+				_inv_filter_quality.clear()
+			else:
+				if _inv_filter_quality.has(qv):
+					_inv_filter_quality.erase(qv)
+				else:
+					_inv_filter_quality.append(qv)
+			_rebuild_filters(item_area, main_panel)
+			# 刷新内容
+			var content: Node = item_area.get_node_or_null("ItemContent")
+			if content:
+				for c2 in content.get_children():
+					c2.queue_free()
+				if _inv_tab == "consume":
+					_build_consume_tab(content, main_panel)
+				else:
+					_build_equip_tab(content, main_panel)
+		)
+		item_area.add_child(qb)
+
+	# 部位过滤（仅装备页显示）
+	if _inv_tab == "equip":
+		var slabels: Array[String] = ["全部", "武器", "防具", "鞋子", "戒指", "项链", "披风", "头盔", "护符"]
+		for si in range(slabels.size()):
+			var sb: Button = Button.new()
+			sb.text = slabels[si]
+			sb.position = Vector2(4 + si * 58, 32)
+			sb.size = Vector2(52, 20)
+			sb.add_theme_font_size_override("font_size", 12)
+			var sv: int = si - 1
+			var ssel: bool = (sv == -1 and _inv_filter_slot.is_empty()) or _inv_filter_slot.has(sv)
+			_btn_style_mini(sb, Color(0.10, 0.12, 0.25) if not ssel else Color(0.2, 0.35, 0.55))
+			sb.add_theme_color_override("font_color", Color(1,1,1) if ssel else Color(0.4,0.45,0.5))
+			sb.pressed.connect(func():
+				if sv == -1:
+					_inv_filter_slot.clear()
+				else:
+					if _inv_filter_slot.has(sv):
+						_inv_filter_slot.erase(sv)
+					else:
+						_inv_filter_slot.append(sv)
+				_rebuild_filters(item_area, main_panel)
+				var content2: Node = item_area.get_node_or_null("ItemContent")
+				if content2:
+					for c3 in content2.get_children():
+						c3.queue_free()
+					_build_equip_tab(content2, main_panel)
+			)
+			item_area.add_child(sb)
 	var item_area: Panel = main_panel.get_node_or_null("ItemArea") as Panel
 	if not item_area:
 		return
+	# 重建过滤按钮（部位筛选仅装备页显示）
+	_rebuild_filters(item_area, main_panel)
+
 	var content: Node = item_area.get_node_or_null("ItemContent")
 	if not content:
 		return
@@ -1319,9 +1430,9 @@ func _build_equip_tab(area: Panel, main_panel: Panel) -> void:
 		var eqp: Dictionary = equip_instances[j]
 		if eqp.get("equipped", false):
 			continue
-		if _inv_filter_quality >= 0 and eqp.get("quality", 0) != _inv_filter_quality:
+		if not _inv_filter_quality.is_empty() and not _inv_filter_quality.has(eqp.get("quality", -1)):
 			continue
-		if _inv_filter_slot >= 0 and eqp.get("slot_type_id", -1) != _inv_filter_slot:
+		if not _inv_filter_slot.is_empty() and not _inv_filter_slot.has(eqp.get("slot_type_id", -1)):
 			continue
 		filtered.append(j)
 
