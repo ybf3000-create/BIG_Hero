@@ -724,11 +724,23 @@ func _slide_grids() -> void:
 
 
 func _on_move_complete() -> void:
-	# 使用 GridExecutor 触发当前位置的格子效果
 	var gtype: int = map_grids[player_grid_index % map_total_grids]
-	var ctx := { "player_level": player_level, "player_gold": player_gold }
+	var ctx := {
+		"player_level": player_level,
+		"player_gold": player_gold,
+		"player_revive": player_revive,
+		"equip_instances": equip_instances,
+		"equipment": equipment,
+	}
 	var result: Dictionary = executor.execute(gtype, ctx)
+	player_gold = ctx.get("player_gold", player_gold)
+	player_revive = ctx.get("player_revive", player_revive)
 	print("[Grid] 格子类型=", gtype, " → ", result["event"])
+
+	# 飘字提示
+	var msg: String = result.get("data", {}).get("message", "")
+	if not msg.is_empty():
+		_show_float_text(msg, Color(1.0, 0.85, 0.3))
 
 	_check_poker_hand()
 	_refresh_top_bar()
