@@ -985,20 +985,33 @@ func _show_inventory_panel() -> void:
 	title.position = Vector2(20, 10)
 	panel.add_child(title)
 
-	# 分页按钮
+	# 分页按钮（标签风格）
 	var tabs := [
 		{ "id": "consume", "text": "消耗品" },
-		{ "id": "equip",   "text": "装备" },
+		{ "id": "equip",   "text": "装    备" },
 	]
 	for ti in range(tabs.size()):
 		var tb: Button = Button.new()
 		tb.text = tabs[ti]["text"]
-		tb.position = Vector2(310 + ti * 120, 8)
-		tb.size = Vector2(100, 30)
-		if _inv_tab == tabs[ti]["id"]:
-			_btn_style_mini(tb, Color(0.22, 0.35, 0.55))
+		tb.position = Vector2(310 + ti * 136, 4)
+		tb.size = Vector2(120, 36)
+		tb.add_theme_font_size_override("font_size", 16)
+		var is_tab_active: bool = (_inv_tab == tabs[ti]["id"])
+		if is_tab_active:
+			var ta := StyleBoxFlat.new()
+			ta.bg_color = Color(0.15, 0.18, 0.28)
+			ta.set_content_margin_all(4)
+			ta.border_width_bottom = 3
+			ta.border_color = Color(0.3, 0.6, 1.0)
+			tb.add_theme_stylebox_override("normal", ta)
+			tb.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0))
 		else:
-			_btn_style_mini(tb, Color(0.12, 0.14, 0.22))
+			var ta2 := StyleBoxFlat.new()
+			ta2.bg_color = Color(0.08, 0.09, 0.15)
+			ta2.set_content_margin_all(4)
+			tb.add_theme_stylebox_override("normal", ta2)
+			tb.add_theme_color_override("font_color", Color(0.4, 0.45, 0.5))
+		tb.flat = true
 		var tid: String = tabs[ti]["id"]
 		tb.pressed.connect(func():
 			_inv_tab = tid
@@ -1016,12 +1029,11 @@ func _show_inventory_panel() -> void:
 
 	var equip_title: Label = Label.new()
 	equip_title.text = "装备栏"
-	equip_title.add_theme_font_size_override("font_size", 16)
+	equip_title.add_theme_font_size_override("font_size", 14)
 	equip_title.add_theme_color_override("font_color", Color(0.7, 0.85, 1.0))
 	equip_title.position = Vector2(10, 8)
 	equip_panel.add_child(equip_title)
 
-	# "?" 按钮 → 全属性
 	var stat_btn: Button = Button.new()
 	stat_btn.text = "?"
 	stat_btn.position = Vector2(70, 8)
@@ -1030,109 +1042,111 @@ func _show_inventory_panel() -> void:
 	stat_btn.pressed.connect(_show_stats_panel)
 	equip_panel.add_child(stat_btn)
 
-	var equip_slots: Array[Dictionary] = [
-		{ "name": "weapon",   "label": "武器", "icon": "⚔️" },
-		{ "name": "armor",    "label": "防具", "icon": "🛡️" },
-		{ "name": "shoes",    "label": "鞋子", "icon": "👟" },
-		{ "name": "ring",     "label": "戒指", "icon": "💍" },
-		{ "name": "necklace", "label": "项链", "icon": "📿" },
-		{ "name": "cape",     "label": "披风", "icon": "🧣" },
-		{ "name": "helmet",   "label": "头盔", "icon": "⛑️" },
-		{ "name": "charm",    "label": "护符", "icon": "🍀" },
+	# 2列布局：左列 4 个，右列 4 个
+	var cols2: Array[Array] = [
+		[{ "name": "weapon",   "label": "武器" }, { "name": "armor",    "label": "防具" }],
+		[{ "name": "shoes",    "label": "鞋子" }, { "name": "ring",     "label": "戒指" }],
+		[{ "name": "necklace", "label": "项链" }, { "name": "cape",     "label": "披风" }],
+		[{ "name": "helmet",   "label": "头盔" }, { "name": "charm",    "label": "护符" }],
 	]
-	var row_h: float = 40.0
-	for j in range(equip_slots.size()):
-		var es: Dictionary = equip_slots[j]
-		var ry: float = 38.0 + j * row_h
+	var icon_s: float = 48.0
+	var col_x: Array[float] = [12.0, 150.0]
+	var row_start: float = 38.0
+	var row_h2: float = 84.0
 
-		var eq_lbl: Label = Label.new()
-		eq_lbl.text = es["label"]
-		eq_lbl.add_theme_font_size_override("font_size", 13)
-		eq_lbl.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
-		eq_lbl.position = Vector2(10, ry + 4)
-		equip_panel.add_child(eq_lbl)
+	for ri in range(cols2.size()):
+		for ci in range(2):
+			var es: Dictionary = cols2[ri][ci]
+			var rx: float = col_x[ci]
+			var ry: float = row_start + ri * row_h2
 
-		# 槽位图标框 48x48
-		var slot_frame: ColorRect = ColorRect.new()
-		slot_frame.position = Vector2(48, ry)
-		slot_frame.size = Vector2(48, 48)
-		slot_frame.color = Color(0.12, 0.13, 0.20)
-		equip_panel.add_child(slot_frame)
+			# 标签
+			var eq_lbl: Label = Label.new()
+			eq_lbl.text = es["label"]
+			eq_lbl.add_theme_font_size_override("font_size", 11)
+			eq_lbl.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
+			eq_lbl.position = Vector2(rx, ry)
+			equip_panel.add_child(eq_lbl)
 
-		var eqp: Dictionary = equipment.get_slot_item(es["name"])
-		if not eqp.is_empty():
-			var eq_icon: Label = Label.new()
-			eq_icon.text = eqp.get("icon", "?")
-			eq_icon.add_theme_font_size_override("font_size", 28)
-			eq_icon.position = Vector2(52, ry + 6)
-			equip_panel.add_child(eq_icon)
+			# 灰色边框框（空槽也显示）
+			var frame_p: Panel = Panel.new()
+			frame_p.position = Vector2(rx, ry + 16)
+			frame_p.size = Vector2(icon_s + 2, icon_s + 2)
+			var fb := StyleBoxFlat.new()
+			fb.bg_color = Color(0.10, 0.11, 0.18)
+			fb.border_width_left = 1; fb.border_width_right = 1
+			fb.border_width_top = 1; fb.border_width_bottom = 1
+			fb.border_color = Color(0.3, 0.3, 0.4)
+			frame_p.add_theme_stylebox_override("panel", fb)
+			equip_panel.add_child(frame_p)
 
-			# 品质框
-			var qborder: ColorRect = ColorRect.new()
-			qborder.position = Vector2(47, ry - 1)
-			qborder.size = Vector2(50, 50)
-			qborder.color = Color(1,1,1,0)
-			var qb := StyleBoxFlat.new()
-			qb.bg_color = Color(1,1,1,0)
-			qb.border_width_left = 2; qb.border_width_right = 2
-			qb.border_width_top = 2; qb.border_width_bottom = 2
-			qb.border_color = _qcolor(eqp.get("quality", 0))
-			# 用Panel来显示边框
-			var qp: Panel = Panel.new()
-			qp.position = Vector2(47, ry - 1)
-			qp.size = Vector2(50, 50)
-			qp.add_theme_stylebox_override("panel", qb)
-			equip_panel.add_child(qp)
+			var eqp: Dictionary = equipment.get_slot_item(es["name"])
+			if not eqp.is_empty():
+				# 品质色边框
+				var qclr: Color = _qcolor(eqp.get("quality", 0))
+				var qb2 := StyleBoxFlat.new()
+				qb2.bg_color = Color(1,1,1,0)
+				qb2.border_width_left = 2; qb2.border_width_right = 2
+				qb2.border_width_top = 2; qb2.border_width_bottom = 2
+				qb2.border_color = qclr
+				frame_p.add_theme_stylebox_override("panel", qb2)
+				frame_p.remove_theme_stylebox_override("panel")
+				frame_p.add_theme_stylebox_override("panel", qb2)
 
-			# 强化等级
-			if eqp.get("enhance", 0) > 0:
-				var eh: Label = Label.new()
-				eh.text = "+" + str(eqp["enhance"])
-				eh.add_theme_font_size_override("font_size", 9)
-				eh.add_theme_color_override("font_color", Color(1,0.85,0.2))
-				eh.position = Vector2(103, ry + 34)
-				equip_panel.add_child(eh)
+				var eq_icon: Label = Label.new()
+				eq_icon.text = eqp.get("icon", "?")
+				eq_icon.add_theme_font_size_override("font_size", 26)
+				eq_icon.position = Vector2(rx + 4, ry + 18)
+				equip_panel.add_child(eq_icon)
 
-			# 套装标记
-			var suit: String = eqp.get("suit_name", "")
-			if not suit.is_empty():
-				var st: Label = Label.new()
-				st.text = suit.substr(0, 2)
-				st.add_theme_font_size_override("font_size", 8)
-				st.add_theme_color_override("font_color", Color(0.3, 1.0, 0.6))
-				st.position = Vector2(103, ry + 2)
-				equip_panel.add_child(st)
+				# 信息行
+				var info_y: float = ry + 68
+				if eqp.get("enhance", 0) > 0:
+					var eh: Label = Label.new()
+					eh.text = "+" + str(eqp["enhance"])
+					eh.add_theme_font_size_override("font_size", 8)
+					eh.add_theme_color_override("font_color", Color(1,0.85,0.2))
+					eh.position = Vector2(rx + 40, info_y)
+					equip_panel.add_child(eh)
 
-			# 宝石标记
-			var gem_s: int = eqp.get("gem_slots", 0)
-			if gem_s > 0:
-				var gem_filled: int = 0
-				for gv in eqp.get("gems", []):
-					if gv > 0: gem_filled += 1
-				var gt: Label = Label.new()
-				gt.text = "◆" + str(gem_filled) + "/" + str(gem_s)
-				gt.add_theme_font_size_override("font_size", 8)
-				gt.add_theme_color_override("font_color", Color(0.8, 0.5, 1.0))
-				gt.position = Vector2(103, ry + 14)
-				equip_panel.add_child(gt)
+				var suit: String = eqp.get("suit_name", "")
+				if not suit.is_empty():
+					var st: Label = Label.new()
+					st.text = suit.substr(0, 1)
+					st.add_theme_font_size_override("font_size", 8)
+					st.add_theme_color_override("font_color", Color(0.3, 1.0, 0.6))
+					st.position = Vector2(rx + 2, info_y)
+					equip_panel.add_child(st)
 
-			# 点击已装备 → 显示tips(含卸下按钮)
-			var slot_btn: Button = Button.new()
-			slot_btn.flat = true
-			slot_btn.position = Vector2(48, ry)
-			slot_btn.size = Vector2(48, 48)
-			_btn_transparent2(slot_btn)
-			var esn: String = es["name"]
-			slot_btn.pressed.connect(func():
-				_close_all_tooltips()
-				_show_equip_tooltip(eqp, -1, esn, panel)
-			)
-			equip_panel.add_child(slot_btn)
+				var gem_s: int = eqp.get("gem_slots", 0)
+				if gem_s > 0:
+					var gem_filled: int = 0
+					for gv in eqp.get("gems", []):
+						if gv > 0: gem_filled += 1
+					var gt: Label = Label.new()
+					gt.text = "◆" + str(gem_filled) + "/" + str(gem_s)
+					gt.add_theme_font_size_override("font_size", 7)
+					gt.add_theme_color_override("font_color", Color(0.8, 0.5, 1.0))
+					gt.position = Vector2(rx + 2, info_y + 12)
+					equip_panel.add_child(gt)
+
+				# 点击已装备 → tips
+				var slot_btn: Button = Button.new()
+				slot_btn.flat = true
+				slot_btn.position = Vector2(rx, ry + 16)
+				slot_btn.size = Vector2(50, 50)
+				_btn_transparent2(slot_btn)
+				var esn: String = es["name"]
+				slot_btn.pressed.connect(func():
+					_close_all_tooltips()
+					_show_equip_tooltip(eqp, -1, esn, panel)
+				)
+				equip_panel.add_child(slot_btn)
 
 	# 套装统计
 	var suit_counts: Dictionary = _count_equipped_suits()
 	if not suit_counts.is_empty():
-		var ssy: float = 38.0 + 8 * 40.0 + 12
+		var ssy: float = row_start + 4 * row_h2 + 8
 		var suit_line: Label = Label.new()
 		var stxt: String = "套装:"
 		for sk in suit_counts:
@@ -1145,20 +1159,65 @@ func _show_inventory_panel() -> void:
 
 	# 道具区域（右侧）
 	var item_area: Panel = Panel.new()
+	item_area.name = "ItemArea"
 	item_area.position = Vector2(310, 50)
 	item_area.size = Vector2(674, 390)
 	_panel_style(item_area, Color(0.08, 0.09, 0.13))
 	panel.add_child(item_area)
 
+	# 品质过滤（顶部）
+	var qlabels: Array[String] = ["全部", "灰", "绿", "蓝", "紫", "橙"]
+	var qclrvals: Array[Color] = [Color(0.5,0.5,0.5), Color(0.6,0.6,0.6), Color(0.2,0.8,0.2), Color(0.2,0.4,1.0), Color(0.7,0.2,1.0), Color(1.0,0.6,0.1)]
+	for qi in range(qlabels.size()):
+		var qb: Button = Button.new()
+		qb.text = qlabels[qi]
+		qb.position = Vector2(4 + qi * 68, 4)
+		qb.size = Vector2(60, 24)
+		qb.add_theme_font_size_override("font_size", 12)
+		var qv: int = qi - 1
+		var is_qa: bool = (_inv_filter_quality == qv)
+		_btn_style_mini(qb, qclrvals[qi].darkened(0.5) if not is_qa else qclrvals[qi].darkened(0.15))
+		qb.pressed.connect(func():
+			_inv_filter_quality = qv if _inv_filter_quality != qv else -1
+			_refresh_item_area(panel)
+		)
+		item_area.add_child(qb)
+
+	# 部位过滤
+	var slabels: Array[String] = ["全", "武器", "防具", "鞋子", "戒指", "项链", "披风", "头盔", "护符"]
+	for si in range(slabels.size()):
+		var sb: Button = Button.new()
+		sb.text = slabels[si]
+		sb.position = Vector2(4 + si * 58, 32)
+		sb.size = Vector2(52, 20)
+		sb.add_theme_font_size_override("font_size", 11)
+		var sv: int = si - 1
+		var is_sa: bool = (_inv_filter_slot == sv)
+		_btn_style_mini(sb, Color(0.10, 0.12, 0.25) if not is_sa else Color(0.2, 0.35, 0.55))
+		sb.pressed.connect(func():
+			_inv_filter_slot = sv if _inv_filter_slot != sv else -1
+			_refresh_item_area(panel)
+		)
+		item_area.add_child(sb)
+
+	# 内容区域
+	var content_area: Panel = Panel.new()
+	content_area.name = "ItemContent"
+	content_area.position = Vector2(0, 56)
+	content_area.size = Vector2(674, 334)
+	var ca_style := StyleBoxFlat.new()
+	ca_style.bg_color = Color(1,1,1,0)
+	content_area.add_theme_stylebox_override("panel", ca_style)
+	item_area.add_child(content_area)
+
 	if _inv_tab == "consume":
-		_build_consume_tab(item_area, panel)
+		_build_consume_tab(content_area, panel)
 	else:
-		_build_equip_tab(item_area, panel)
+		_build_equip_tab(content_area, panel)
 
 	# 底部按钮
 	var bottom_y: float = 450.0
 
-	# 装备分解
 	var dismantle_btn: Button = Button.new()
 	dismantle_btn.text = "♻ 分解"
 	dismantle_btn.position = Vector2(900, bottom_y)
@@ -1166,43 +1225,6 @@ func _show_inventory_panel() -> void:
 	_btn_style_mini(dismantle_btn, Color(0.2, 0.12, 0.2))
 	dismantle_btn.pressed.connect(func(): _show_dismantle_panel(panel))
 	panel.add_child(dismantle_btn)
-
-	# 品质过滤
-	var qlabels: Array[String] = ["全部", "灰", "绿", "蓝", "紫", "橙"]
-	var qcolors: Array[Color] = [Color(0.5,0.5,0.5), Color(0.6,0.6,0.6), Color(0.2,0.8,0.2), Color(0.2,0.4,1.0), Color(0.7,0.2,1.0), Color(1.0,0.6,0.1)]
-	for qi in range(qlabels.size()):
-		var qb: Button = Button.new()
-		qb.text = qlabels[qi]
-		qb.position = Vector2(136 + qi * 58, bottom_y)
-		qb.size = Vector2(52, 26)
-		qb.add_theme_font_size_override("font_size", 10)
-		var qv: int = qi - 1  # -1=全部, 0=灰...
-		var is_active: bool = (_inv_filter_quality == qv)
-		_btn_style_mini(qb, qcolors[qi].darkened(0.4) if not is_active else qcolors[qi].darkened(0.1))
-		qb.pressed.connect(func():
-			_inv_filter_quality = qv
-			panel.queue_free()
-			_show_inventory_panel()
-		)
-		panel.add_child(qb)
-
-	# 部位过滤
-	var slabels: Array[String] = ["全", "武器", "防具", "鞋子", "戒指", "项链", "披风", "头盔", "护符"]
-	for si in range(slabels.size()):
-		var sb: Button = Button.new()
-		sb.text = slabels[si]
-		sb.position = Vector2(136 + si * 52, bottom_y + 28)
-		sb.size = Vector2(46, 22)
-		sb.add_theme_font_size_override("font_size", 10)
-		var sv: int = si - 1  # -1=全部, 0=weapon...
-		var s_active: bool = (_inv_filter_slot == sv)
-		_btn_style_mini(sb, Color(0.12, 0.14, 0.30) if not s_active else Color(0.22, 0.35, 0.55))
-		sb.pressed.connect(func():
-			_inv_filter_slot = sv
-			panel.queue_free()
-			_show_inventory_panel()
-		)
-		panel.add_child(sb)
 
 	# 关闭
 	var close_btn: Button = Button.new()
@@ -1214,6 +1236,22 @@ func _show_inventory_panel() -> void:
 	panel.add_child(close_btn)
 
 	add_child(panel)
+
+
+## 刷新物品区域（不关面板）
+func _refresh_item_area(main_panel: Panel) -> void:
+	var item_area: Panel = main_panel.get_node_or_null("ItemArea") as Panel
+	if not item_area:
+		return
+	var content: Node = item_area.get_node_or_null("ItemContent")
+	if not content:
+		return
+	for c in content.get_children():
+		c.queue_free()
+	if _inv_tab == "consume":
+		_build_consume_tab(content, main_panel)
+	else:
+		_build_equip_tab(content, main_panel)
 
 
 func _build_consume_tab(area: Panel, main_panel: Panel) -> void:
@@ -1364,15 +1402,6 @@ func _show_equip_tooltip(eqp: Dictionary, idx: int, slot_name: String, main_pane
 	tip.size = Vector2(340, 340)
 	_panel_style(tip, Color(0.06, 0.07, 0.14, 0.97))
 	_tooltip_nodes.append(tip)
-
-	# 点击 tip 外部关闭
-	var bg_btn: Button = Button.new()
-	bg_btn.flat = true
-	bg_btn.position = Vector2(0, 0)
-	bg_btn.size = tip.size
-	_btn_transparent2(bg_btn)
-	bg_btn.pressed.connect(func(): _close_all_tooltips())
-	tip.add_child(bg_btn)
 
 	var sy: float = 8.0
 	var qclr: Color = _qcolor(eqp.get("quality", 0))
@@ -1529,13 +1558,17 @@ func _show_equip_tooltip(eqp: Dictionary, idx: int, slot_name: String, main_pane
 		)
 		tip.add_child(unequip_btn)
 
-	var close_tip: Button = Button.new()
-	close_tip.text = "✕"
-	close_tip.position = Vector2(300, btn_y)
-	close_tip.size = Vector2(28, 26)
-	_btn_style_mini(close_tip, Color(0.2, 0.1, 0.1))
-	close_tip.pressed.connect(func(): tip.queue_free(); _tooltip_nodes.erase(tip))
-	tip.add_child(close_tip)
+	# 遮罩层（点击外部关闭所有 tooltips）
+	var overlay: Button = Button.new()
+	overlay.flat = true
+	overlay.position = Vector2(-x_pos, -60)  # 覆盖整个面板区域
+	overlay.size = Vector2(1000, 550)
+	var ov_style := StyleBoxFlat.new()
+	ov_style.bg_color = Color(0, 0, 0, 0.01)  # 几乎不可见
+	overlay.add_theme_stylebox_override("normal", ov_style)
+	overlay.pressed.connect(func(): _close_all_tooltips())
+	tip.add_child(overlay)
+	tip.move_child(overlay, 0)  # 放到最底层
 
 	main_panel.add_child(tip)
 
@@ -1991,6 +2024,9 @@ func _bar_style(node: ProgressBar, clr: Color) -> void:
 func _btn_style_mini(btn: Button, clr: Color) -> void:
 	var n: StyleBoxFlat = StyleBoxFlat.new()
 	n.bg_color = clr
+	n.border_width_left = 1; n.border_width_right = 1
+	n.border_width_top = 1; n.border_width_bottom = 1
+	n.border_color = clr.lightened(0.3)
 	n.set_corner_radius_all(3)
 	btn.add_theme_stylebox_override("normal", n)
 	btn.add_theme_color_override("font_color", Color.WHITE)
