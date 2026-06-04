@@ -71,6 +71,7 @@ var equipment: RefCounted
 # 生成装备实例列表（每件唯一）
 var equip_instances: Array[Dictionary] = []
 var gem_bag: Array[Dictionary] = []   # [{gem_id, level, count}]
+var lottery_tickets: Array[int] = []  # 3位数 000~999, 最多10张
 var _tooltip_nodes: Array[Node] = []  # 当前打开的 tooltip 列表
 var _float_text_node: Label             # 当前飘字
 
@@ -500,6 +501,15 @@ func _build_bottom_bar() -> void:
 	_btn_style_mini(gem_btn, Color(0.38, 0.12, 0.38))
 	gem_btn.pressed.connect(_on_test_generate_gem)
 	bar.add_child(gem_btn)
+
+	# -- 彩票测试按钮 --
+	var lottery_btn := Button.new()
+	lottery_btn.text = "🎰 生成彩票"
+	lottery_btn.position = Vector2(224, 8)
+	lottery_btn.size = Vector2(100, 28)
+	_btn_style_mini(lottery_btn, Color(0.38, 0.08, 0.18))
+	lottery_btn.pressed.connect(_on_test_generate_lottery)
+	bar.add_child(lottery_btn)
 
 	# -- 装备测试按钮（左下角） --
 	var test_btn := Button.new()
@@ -1024,6 +1034,87 @@ func _synthesize_gem(gid: int, lv: int) -> void:
 	_show_float_text(gdef.get("icon", "🔘") + " 合成 → Lv." + str(lv + 1), Color(0.3, 1.0, 0.6))
 
 
+func _on_test_generate_lottery() -> void:
+	if lottery_tickets.size() >= 10:
+		_show_float_text("彩票已满（最多10张）", Color(1, 0.4, 0.4))
+		return
+	var num: int = randi_range(0, 999)
+	lottery_tickets.append(num)
+	_show_float_text("🎟️ 获得彩票 " + _fmt_lottery(num), Color(1, 0.7, 0.2))
+
+
+func _fmt_lottery(num: int) -> String:
+	return str(num).pad_zeros(3)
+
+
+func _build_lottery_tab(area: Panel, _main_panel: Panel) -> void:
+	var gap: float = 10.0
+	var sy: float = gap
+
+	var title: Label = Label.new()
+	title.text = "🎫 彩票 (" + str(lottery_tickets.size()) + "/10)"
+	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_color_override("font_color", Color(1.0, 0.8, 0.3))
+	title.position = Vector2(gap, sy)
+	area.add_child(title)
+	sy += 28
+
+	if lottery_tickets.is_empty():
+		var empty_lbl: Label = Label.new()
+		empty_lbl.text = "暂无彩票，走到彩票格可获取"
+		empty_lbl.add_theme_font_size_override("font_size", 12)
+		empty_lbl.add_theme_color_override("font_color", Color(0.4, 0.45, 0.5))
+		empty_lbl.position = Vector2(gap, sy + 20)
+		area.add_child(empty_lbl)
+
+	for tx in range(lottery_tickets.size()):
+		var row_y: float = sy + tx * 44
+		if row_y > 280:
+			break
+
+		# 彩票卡片
+		var card: Panel = Panel.new()
+		card.position = Vector2(gap, row_y)
+		card.size = Vector2(300, 38)
+		var cs := StyleBoxFlat.new()
+		cs.bg_color = Color(0.08, 0.08, 0.15)
+		cs.border_width_left = 1; cs.border_width_right = 1
+		cs.border_width_top = 1; cs.border_width_bottom = 1
+		cs.border_color = Color(1.0, 0.6, 0.2, 0.5)
+		cs.set_corner_radius_all(6)
+		card.add_theme_stylebox_override("panel", cs)
+		area.add_child(card)
+
+		# 数字（大字）
+		var num_lbl: Label = Label.new()
+		num_lbl.text = _fmt_lottery(lottery_tickets[tx])
+		num_lbl.add_theme_font_size_override("font_size", 28)
+		num_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
+		num_lbl.position = Vector2(gap + 12, row_y + 2)
+		area.add_child(num_lbl)
+
+		# 编号
+		var idx_lbl: Label = Label.new()
+		idx_lbl.text = "#" + str(tx + 1)
+		idx_lbl.add_theme_font_size_override("font_size", 9)
+		idx_lbl.add_theme_color_override("font_color", Color(0.4, 0.45, 0.5))
+		idx_lbl.position = Vector2(gap + 100, row_y + 4)
+		area.add_child(idx_lbl)
+
+	sy += lottery_tickets.size() * 44 + 20
+
+	# 底部说明
+	var rounds_left: int = 10 - (player_grid_index / map_total_grids) % 10
+	rounds_left = maxi(1, rounds_left)
+	var footer: Label = Label.new()
+	footer.text = "🔄 还有 " + str(rounds_left) + " 圈开奖  |  中奖号码 = 开奖时随机生成的3位数字"
+	footer.add_theme_font_size_override("font_size", 11)
+	footer.add_theme_color_override("font_color", Color(0.5, 0.55, 0.6))
+	footer.position = Vector2(gap, sy)
+	footer.size = Vector2(640, 20)
+	area.add_child(footer)
+
+
 func _on_bag_pressed() -> void:
 	_show_inventory_panel()
 func _on_skill_pressed()   -> void: print("[主界面] 打开技能")
@@ -1066,6 +1157,7 @@ func _show_inventory_panel() -> void:
 	var tabs := [
 		{ "id": "consume", "text": "消耗品" },
 		{ "id": "equip",   "text": "装    备" },
+		{ "id": "lottery", "text": "彩    票" },
 	]
 	for ti in range(tabs.size()):
 		var tb: Button = Button.new()
@@ -1266,6 +1358,8 @@ func _show_inventory_panel() -> void:
 
 	if _inv_tab == "consume":
 		_build_consume_tab(content_area, panel)
+	elif _inv_tab == "lottery":
+		_build_lottery_tab(content_area, panel)
 	else:
 		_build_equip_tab(content_area, panel)
 
@@ -1397,6 +1491,8 @@ func _refresh_item_area(main_panel: Panel) -> void:
 		c.queue_free()
 	if _inv_tab == "consume":
 		_build_consume_tab(content, main_panel)
+	elif _inv_tab == "lottery":
+		_build_lottery_tab(content, main_panel)
 	else:
 		_build_equip_tab(content, main_panel)
 
