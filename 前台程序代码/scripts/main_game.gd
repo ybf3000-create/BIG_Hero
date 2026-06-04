@@ -937,6 +937,10 @@ func _close_all_tooltips() -> void:
 		if is_instance_valid(t):
 			t.queue_free()
 	_tooltip_nodes.clear()
+	# 移除遮罩层
+	var ov: Node = get_node_or_null("TooltipOverlay")
+	if ov:
+		ov.queue_free()
 
 func _on_test_generate_equip() -> void:
 	var slots: Array[String] = ["weapon","armor","shoes","ring","necklace","cape","helmet","charm"]
@@ -1396,6 +1400,9 @@ func _build_equip_tab(area: Panel, main_panel: Panel) -> void:
 
 ## 装备完整 tooltip
 func _show_equip_tooltip(eqp: Dictionary, idx: int, slot_name: String, main_panel: Panel, x_pos: float = 340.0) -> void:
+	# 确保全屏遮罩层存在
+	_ensure_overlay()
+
 	var tip: Panel = Panel.new()
 	tip.name = "EquipTooltip"
 	tip.position = Vector2(x_pos, 60)
@@ -1558,19 +1565,22 @@ func _show_equip_tooltip(eqp: Dictionary, idx: int, slot_name: String, main_pane
 		)
 		tip.add_child(unequip_btn)
 
-	# 遮罩层（点击外部关闭所有 tooltips）
-	var overlay: Button = Button.new()
-	overlay.flat = true
-	overlay.position = Vector2(-x_pos, -60)  # 覆盖整个面板区域
-	overlay.size = Vector2(1000, 550)
-	var ov_style := StyleBoxFlat.new()
-	ov_style.bg_color = Color(0, 0, 0, 0.01)  # 几乎不可见
-	overlay.add_theme_stylebox_override("normal", ov_style)
-	overlay.pressed.connect(func(): _close_all_tooltips())
-	tip.add_child(overlay)
-	tip.move_child(overlay, 0)  # 放到最底层
-
 	main_panel.add_child(tip)
+
+
+func _ensure_overlay() -> void:
+	if get_node_or_null("TooltipOverlay"):
+		return
+	var ov: Button = Button.new()
+	ov.name = "TooltipOverlay"
+	ov.flat = true
+	ov.position = Vector2(0, 0)
+	ov.size = Vector2(1280, 720)
+	var os := StyleBoxFlat.new()
+	os.bg_color = Color(0, 0, 0, 0.01)
+	ov.add_theme_stylebox_override("normal", os)
+	ov.pressed.connect(_close_all_tooltips)
+	add_child(ov)
 
 
 ## 对比 tooltips（背包装备 + 已装备同部位）
