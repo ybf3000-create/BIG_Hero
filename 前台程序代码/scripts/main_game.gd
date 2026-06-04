@@ -1253,42 +1253,8 @@ func _show_inventory_panel() -> void:
 	_panel_style(item_area, Color(0.08, 0.09, 0.13))
 	panel.add_child(item_area)
 
-	# 品质过滤（顶部）
-	var qlabels: Array[String] = ["全部", "灰", "绿", "蓝", "紫", "橙"]
-	var qclrvals: Array[Color] = [Color(0.5,0.5,0.5), Color(0.6,0.6,0.6), Color(0.2,0.8,0.2), Color(0.2,0.4,1.0), Color(0.7,0.2,1.0), Color(1.0,0.6,0.1)]
-	for qi in range(qlabels.size()):
-		var qb: Button = Button.new()
-		qb.text = qlabels[qi]
-		qb.position = Vector2(4 + qi * 68, 4)
-		qb.size = Vector2(60, 24)
-		qb.add_theme_font_size_override("font_size", 12)
-		var qv: int = qi - 1
-		var is_qa: bool = (_inv_filter_quality == qv)
-		_btn_style_mini(qb, qclrvals[qi].darkened(0.5) if not is_qa else qclrvals[qi].darkened(0.15))
-		qb.pressed.connect(func():
-			_inv_filter_quality = qv if _inv_filter_quality != qv else -1
-			_refresh_item_area(panel)
-		)
-		item_area.add_child(qb)
-
-	# 部位过滤
-	var slabels: Array[String] = ["全", "武器", "防具", "鞋子", "戒指", "项链", "披风", "头盔", "护符"]
-	for si in range(slabels.size()):
-		var sb: Button = Button.new()
-		sb.text = slabels[si]
-		sb.position = Vector2(4 + si * 58, 32)
-		sb.size = Vector2(52, 20)
-		sb.add_theme_font_size_override("font_size", 11)
-		var sv: int = si - 1
-		var is_sa: bool = (_inv_filter_slot == sv)
-		_btn_style_mini(sb, Color(0.10, 0.12, 0.25) if not is_sa else Color(0.2, 0.35, 0.55))
-		sb.pressed.connect(func():
-			_inv_filter_slot = sv if _inv_filter_slot != sv else -1
-			_refresh_item_area(panel)
-		)
-		item_area.add_child(sb)
-
-	# 内容区域
+	# 过滤 + 内容（由 _rebuild_filters 统一管理）
+	_rebuild_filters(item_area, panel)
 	var content_area: Panel = Panel.new()
 	content_area.name = "ItemContent"
 	content_area.position = Vector2(0, 56)
