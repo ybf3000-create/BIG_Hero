@@ -1415,6 +1415,9 @@ func _rebuild_filters(item_area: Panel, main_panel: Panel) -> void:
 					_build_equip_tab(content2, main_panel)
 			)
 			item_area.add_child(sb)
+
+
+func _refresh_item_area(main_panel: Panel) -> void:
 	var item_area: Panel = main_panel.get_node_or_null("ItemArea") as Panel
 	if not item_area:
 		return
