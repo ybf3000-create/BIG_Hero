@@ -74,6 +74,8 @@ var gem_bag: Array[Dictionary] = []   # [{gem_id, level, count}]
 var lottery_tickets: Array[int] = []  # 3位数 000~999, 最多10张
 var _tooltip_nodes: Array[Node] = []  # 当前打开的 tooltip 列表
 var _float_text_node: Label             # 当前飘字
+var active_buffs: Array[Dictionary] = []  # [{name, turns_remaining}]
+var lottery_draw_at: int = 0           # 下次开奖圈数
 
 # 移动动画
 var _moving: bool = false
@@ -737,16 +739,40 @@ func _on_move_complete() -> void:
 	player_revive = ctx.get("player_revive", player_revive)
 	print("[Grid] 格子类型=", gtype, " → ", result["event"])
 
-	# 飘字提示
-	var msg: String = result.get("data", {}).get("message", "")
+	# 处理装备掉落飘字
+	var edata: Dictionary = result.get("data", {})
+	if edata.get("type", "") == "equip":
+		var eqp: Dictionary = edata.get("equip", {})
+		if not eqp.is_empty():
+			_show_float_text("获得装备 " + EquipGenCls.full_name(eqp), Color(1.0, 0.85, 0.3))
+
+	# 闪电跳跃
+	elif edata.has("jump"):
+		var jump_val: int = edata["jump"]
+		_do_lightning_jump(jump_val)
+		return  # 跳转会触发新格子的 _on_move_complete
+
+	# 飘字 + buff
+	var msg: String = edata.get("message", "")
 	if not msg.is_empty():
-		_show_float_text(msg, Color(1.0, 0.85, 0.3))
+		var clr: Color = Color(1.0, 0.85, 0.3)
+		if edata.get("type", "") == "punish":
+			clr = Color(1.0, 0.4, 0.4)
+		elif edata.get("type", "") == "bless":
+			clr = Color(0.3, 1.0, 0.6)
+		_show_float_text(msg, clr)
+
+	# 处理命运 buff（3场战斗类型）
+	if edata.get("name", "") in ["技能大赛", "攻击削弱"]:
+		var turns: int = 3
+		var bname: String = edata["name"]
+		var bt: String = "dmg_x" + ("1.3" if bname == "技能大赛" else "0.7")
+		_add_buff(bname, bt, turns)
 
 	_check_poker_hand()
+	_check_lottery_draw()
 	_refresh_top_bar()
 	_auto_save()
-
-	# 自动挂机继续
 	if auto_play_enabled:
 		_start_auto_timer()
 
@@ -757,6 +783,168 @@ func _auto_save() -> void:
 	var sm = _sm()
 	if sm:
 		sm.save_game(_current_slot, _build_save_data())
+
+
+## ============ 闪电跳跃 ============
+func _do_lightning_jump(jump_val: int) -> void:
+	_show_float_text("⚡ 闪电跳跃 " + str(jump_val) + " 格！", Color(1.0, 1.0, 0.3))
+	# 粒子特效(竖着上升)
+	_spawn_lightning_particles()
+	# 跳跃
+	player_grid_index = (player_grid_index + jump_val) % map_total_grids
+	_refresh_grid_display()
+	_on_move_complete()  # 触发新格子
+
+
+func _spawn_lightning_particles() -> void:
+	var hero: TextureRect = get_node_or_null("MapArea/HeroOnMap") as TextureRect
+	if not hero: return
+	var particles := CPUParticles2D.new()
+	particles.emitting = true
+	particles.amount = 20
+	particles.lifetime = 0.8
+	particles.direction = Vector2(0, -1)
+	particles.spread = 30.0
+	particles.gravity = Vector2(0, 0)
+	particles.initial_velocity_min = 80.0
+	particles.initial_velocity_max = 160.0
+	particles.color = Color(1.0, 1.0, 0.3, 0.8)
+	particles.scale_amount_min = 2.0
+	particles.scale_amount_max = 4.0
+	particles.position = hero.position + Vector2(hero.size.x/2, hero.size.y/2)
+	hero.get_parent().add_child(particles)
+	# 人物闪烁消失
+	var tw := create_tween()
+	tw.tween_property(hero, "modulate:a", 0.0, 0.3)
+	tw.tween_property(hero, "modulate:a", 1.0, 0.3)
+	hero.modulate.a = 1.0
+	# 自动清理粒子
+	var t := get_tree().create_timer(1.5)
+	t.timeout.connect(particles.queue_free)
+
+
+## ============ Buff 管理 ============
+func _add_buff(name: String, type_tag: String, turns: int) -> void:
+	active_buffs.append({ "name": name, "type": type_tag, "turns": turns })
+	_show_float_text(name + "(" + str(turns) + "场)", Color(0.3, 1.0, 0.6))
+
+
+func _tick_buffs() -> void:
+	for i in range(active_buffs.size() - 1, -1, -1):
+		active_buffs[i]["turns"] -= 1
+		if active_buffs[i]["turns"] <= 0:
+			active_buffs.remove_at(i)
+
+
+## ============ 彩票开奖 ============
+func _check_lottery_draw() -> void:
+	if lottery_tickets.is_empty() or lottery_draw_at <= 0:
+		if lottery_tickets.size() > 0 and lottery_draw_at <= 0:
+			lottery_draw_at = int(ceil(map_total_grids / 7.0))  # 约5圈
+		return
+	lottery_draw_at -= 1
+	if lottery_draw_at > 0:
+		return
+
+	# 开奖
+	var win_num: int = randi_range(0, 999)
+	var win_s: String = _fmt_lottery(win_num)
+	var hit: bool = lottery_tickets.has(win_num)
+
+	_show_lottery_popup(win_s, hit)
+	lottery_tickets.clear()
+	lottery_draw_at = int(ceil(map_total_grids / 7.0))
+
+
+func _show_lottery_popup(win_num: String, hit: bool) -> void:
+	# 遮罩
+	var ov: ColorRect = ColorRect.new()
+	ov.name = "LotteryOverlay"
+	ov.position = Vector2(0, 0)
+	ov.size = Vector2(1280, 720)
+	ov.color = Color(0, 0, 0, 0.6)
+	add_child(ov)
+
+	# 弹窗
+	var popup: Panel = Panel.new()
+	popup.position = Vector2(390, 180)
+	popup.size = Vector2(500, 320)
+	_panel_style(popup, Color(0.08, 0.06, 0.15, 0.98))
+	ov.add_child(popup)
+
+	var title: Label = Label.new()
+	title.text = "🎰 彩票开奖"
+	title.add_theme_font_size_override("font_size", 26)
+	title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.position = Vector2(0, 20)
+	title.size = Vector2(500, 36)
+	popup.add_child(title)
+
+	# 中奖号码
+	var num_lbl: Label = Label.new()
+	num_lbl.text = win_num
+	num_lbl.add_theme_font_size_override("font_size", 72)
+	num_lbl.add_theme_color_override("font_color", Color(1.0, 0.9, 0.1))
+	num_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	num_lbl.position = Vector2(0, 80)
+	num_lbl.size = Vector2(500, 80)
+	popup.add_child(num_lbl)
+
+	if hit:
+		var win_lbl: Label = Label.new()
+		win_lbl.text = "🎉 恭喜中奖！ 🎉"
+		win_lbl.add_theme_font_size_override("font_size", 32)
+		win_lbl.add_theme_color_override("font_color", Color(1.0, 0.3, 0.8))
+		win_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		win_lbl.position = Vector2(0, 180)
+		win_lbl.size = Vector2(500, 44)
+		popup.add_child(win_lbl)
+
+		var rewards: Label = Label.new()
+		rewards.text = "💰 金币  🟢宝石  ⚔️稀有装备  📦金币大包  🎴史诗卡  🟣史诗装备  🟠传说装备"
+		rewards.add_theme_font_size_override("font_size", 13)
+		rewards.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
+		rewards.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		rewards.position = Vector2(0, 240)
+		rewards.size = Vector2(500, 30)
+		popup.add_child(rewards)
+
+		# 彩带粒子
+		_spawn_confetti(ov)
+	else:
+		var lose_lbl: Label = Label.new()
+		lose_lbl.text = "未中奖，彩票已清空"
+		lose_lbl.add_theme_font_size_override("font_size", 18)
+		lose_lbl.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
+		lose_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lose_lbl.position = Vector2(0, 200)
+		lose_lbl.size = Vector2(500, 30)
+		popup.add_child(lose_lbl)
+
+	# 3秒后关闭
+	var t := get_tree().create_timer(3.0)
+	t.timeout.connect(func():
+		if is_instance_valid(ov): ov.queue_free()
+	)
+
+
+func _spawn_confetti(parent: Control) -> void:
+	var particles := CPUParticles2D.new()
+	particles.emitting = true
+	particles.amount = 60
+	particles.lifetime = 1.5
+	particles.gravity = Vector2(0, 80)
+	particles.initial_velocity_min = 100.0
+	particles.initial_velocity_max = 300.0
+	particles.spread = 180.0
+	particles.position = Vector2(640, 240)
+	particles.color = Color(1.0, 0.8, 0.2, 0.9)
+	particles.scale_amount_min = 3.0
+	particles.scale_amount_max = 6.0
+	parent.add_child(particles)
+	var t := get_tree().create_timer(3.0)
+	t.timeout.connect(particles.queue_free)
 
 
 ## ============================================================
