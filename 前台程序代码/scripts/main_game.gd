@@ -498,30 +498,30 @@ func _build_bottom_bar() -> void:
 	# -- 宝石测试按钮 --
 	var gem_btn := Button.new()
 	gem_btn.text = "💎 生成宝石"
-	gem_btn.position = Vector2(8, 8)
+	gem_btn.position = Vector2(8, 314)
 	gem_btn.size = Vector2(100, 28)
 	_btn_style_mini(gem_btn, Color(0.38, 0.12, 0.38))
 	gem_btn.pressed.connect(_on_test_generate_gem)
-	bar.add_child(gem_btn)
+	add_child(gem_btn)
 
 	# -- 彩票测试按钮 --
 	var lottery_btn := Button.new()
 	lottery_btn.text = "🎰 生成彩票"
-	lottery_btn.position = Vector2(224, 8)
+	lottery_btn.position = Vector2(224, 314)
 	lottery_btn.size = Vector2(100, 28)
 	_btn_style_mini(lottery_btn, Color(0.38, 0.08, 0.18))
 	lottery_btn.pressed.connect(_on_test_generate_lottery)
-	bar.add_child(lottery_btn)
+	add_child(lottery_btn)
 
-	# -- 装备测试按钮（左下角） --
+	# -- 装备测试按钮 --
 	var test_btn := Button.new()
 	test_btn.name = "TestEquipBtn"
 	test_btn.text = "🔧 生成装备"
-	test_btn.position = Vector2(116, 8)
+	test_btn.position = Vector2(116, 314)
 	test_btn.size = Vector2(100, 28)
 	_btn_style_mini(test_btn, Color(0.22, 0.15, 0.38))
 	test_btn.pressed.connect(_on_test_generate_equip)
-	bar.add_child(test_btn)
+	add_child(test_btn)
 
 	add_child(bar)
 
@@ -1334,10 +1334,23 @@ func _show_inventory_panel() -> void:
 	# 已打开→关闭
 	var old: Node = get_node_or_null("InventoryPanel")
 	if old:
+		old.get_parent().remove_child(old)
 		old.queue_free()
 		return
 
 	_auto_save()
+	_build_inventory_panel()
+
+
+func _refresh_inventory_panel() -> void:
+	var old: Node = get_node_or_null("InventoryPanel")
+	if old:
+		old.get_parent().remove_child(old)
+		old.queue_free()
+	_build_inventory_panel()
+
+
+func _build_inventory_panel() -> void:
 
 	var panel: Panel = Panel.new()
 	panel.name = "InventoryPanel"
