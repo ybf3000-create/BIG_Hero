@@ -68,7 +68,9 @@ static var AFFIX_POOL: Array[Dictionary] = [
 	{ "name": "防御%",     "type": "defense", "min": 3.0,  "max": 12.0, "fmt": "+%.0f%%" },
 	{ "name": "生命%",     "type": "defense", "min": 3.0,  "max": 15.0, "fmt": "+%.0f%%" },
 	{ "name": "格挡率",    "type": "defense", "min": 1.0,  "max": 25.0, "fmt": "+%.0f%%" },
-	{ "name": "闪避率",    "type": "defense", "min": 1.0,  "max": 25.0, "fmt": "+%.0f%%" }
+	{ "name": "闪避率",    "type": "defense", "min": 1.0,  "max": 25.0, "fmt": "+%.0f%%" },
+	{ "name": "回血",      "type": "defense", "min": 1.0,  "max": 8.0,  "fmt": "+%.0f/步" },
+	{ "name": "吸血",      "type": "defense", "min": 1.0,  "max": 5.0,  "fmt": "+%.0f%%" },
 	{ "name": "速度",      "type": "universal","min": 2.0, "max": 15.0, "fmt": "+%.0f" },
 	{ "name": "冷却缩减",  "type": "universal","min": 2.0, "max": 10.0, "fmt": "+%.0f%%" },
 	{ "name": "幸运",      "type": "universal","min": 2.0, "max": 15.0, "fmt": "+%.0f" },
