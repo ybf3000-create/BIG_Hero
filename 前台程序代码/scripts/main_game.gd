@@ -2045,28 +2045,35 @@ func _find_instance_idx(eqp: Dictionary) -> int:
 
 ## 卸下装备
 func _on_unequip_instance(slot_name: String) -> void:
+	print("[DEBUG] _on_unequip_instance called, slot=", slot_name)
 	var eqp: Dictionary = equipment.unequip(slot_name)
 	if eqp.is_empty():
+		print("[DEBUG] unequip returned empty for ", slot_name)
 		return
+	print("[DEBUG] unequipped: ", eqp.get("base_name","?"), " uid=", eqp.get("uid",-1))
 	# 在 equip_instances 中找到原始条目，标记为未装备
 	var uid: int = eqp.get("uid", -1)
 	for i in range(equip_instances.size()):
 		if equip_instances[i].get("uid", -1) == uid:
 			equip_instances[i]["equipped"] = false
-			print("[装备] 卸下:", equip_instances[i].get("base_name","?"), "←", slot_name)
+			print("[DEBUG] 卸下完成:", equip_instances[i].get("base_name","?"), "←", slot_name)
 			return
 	# 没找到原始条目（装备来自宝箱等直接装备的情况），追加
 	eqp["equipped"] = false
 	equip_instances.append(eqp)
-	print("[装备] 卸下:", eqp.get("base_name","?"), "←", slot_name)
+	print("[DEBUG] 卸下: 原始条目未找到，追加")
 
 
 func _on_equip_instance(idx: int) -> void:
+	print("[DEBUG] _on_equip_instance called, idx=", idx, " total=", equip_instances.size())
 	if idx < 0 or idx >= equip_instances.size():
+		print("[DEBUG] _on_equip_instance OUT OF BOUNDS")
 		return
 	var eqp: Dictionary = equip_instances[idx]
+	print("[DEBUG] eqp keys: ", eqp.keys(), " slot: ", eqp.get("slot","?"))
 	var slot_name: String = eqp.get("slot", "")
 	if slot_name.is_empty():
+		print("[DEBUG] _on_equip_instance slot empty")
 		return
 	# 卸下同部位旧装备
 	for i in range(equip_instances.size()):
@@ -2074,7 +2081,8 @@ func _on_equip_instance(idx: int) -> void:
 			equip_instances[i]["equipped"] = false
 			break
 	eqp["equipped"] = true
-	equipment.equip_instance(slot_name, eqp)
+	var ok: bool = equipment.equip_instance(slot_name, eqp)
+	print("[DEBUG] equip_instance returned: ", ok, " slot: ", slot_name, " name: ", eqp.get("base_name","?"))
 	print("[装备] 穿戴:", EquipGenCls.full_name(eqp), "→", slot_name)
 
 
