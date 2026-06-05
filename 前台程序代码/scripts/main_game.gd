@@ -2060,6 +2060,10 @@ func _on_unequip_instance(slot_name: String) -> void:
 		if equip_instances[i].get("uid", -1) == uid:
 			equip_instances[i]["equipped"] = false
 			print("[DEBUG] 卸下完成:", equip_instances[i].get("base_name","?"), "←", slot_name)
+			# 卸下装备后关闭属性面板，下次打开可见新值
+			var sp2: Node = get_node_or_null("StatsPanel")
+			if sp2:
+				sp2.queue_free()
 			return
 	# 没找到原始条目（装备来自宝箱等直接装备的情况），追加
 	eqp["equipped"] = false
@@ -2086,6 +2090,10 @@ func _on_equip_instance(idx: int) -> void:
 	eqp["equipped"] = true
 	var ok: bool = equipment.equip_instance(slot_name, eqp)
 	print("[DEBUG] equip_instance returned: ", ok, " slot: ", slot_name, " name: ", eqp.get("base_name","?"))
+	# 装换装备后关闭属性面板，下次打开可见新值
+	var sp: Node = get_node_or_null("StatsPanel")
+	if sp:
+		sp.queue_free()
 	print("[装备] 穿戴:", EquipGenCls.full_name(eqp), "→", slot_name)
 
 
