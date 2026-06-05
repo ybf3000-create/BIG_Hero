@@ -46,6 +46,8 @@ const SUIT_COLORS := {
 	"♦": Color(1.0, 0.15, 0.15),
 }
 
+const GameConfigCls = preload("res://scripts/game_config.gd")
+
 # -- 玩家状态 --
 var player_name: String = "勇者"
 var player_level: int = 1
@@ -584,7 +586,7 @@ func _load_from_save_data(data: Dictionary) -> void:
 	player_name = data.get("character_name", "勇者")
 	player_level = data.get("level", 1)
 	player_exp = data.get("exp", 0)
-	player_exp_max = data.get("exp_max", 100)
+	player_exp_max = GameConfigCls.exp_for_level(player_level)  # 强制按新公式重算
 	player_gold = data.get("gold", 0)
 	player_revive = data.get("revive_coins", 3)
 	player_grid_index = data.get("grid_index", 0)
