@@ -183,6 +183,7 @@ func _show_create_dialog(slot: int) -> void:
 	dlg.position = Vector2(400, 200)
 	dlg.unresizable = true
 	dlg.popup_window = true
+	dlg.close_requested.connect(func(): dlg.queue_free())
 
 	var bg := ColorRect.new()
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
