@@ -131,6 +131,7 @@ func _ready() -> void:
 
 	_build_top_bar()
 	_refresh_poker_slots()  # TopBar 创建后才能刷新牌型显示
+	_refresh_compact_stats()  # 首次填充紧凑属性
 	_build_map_area()
 	_build_bottom_bar()
 	if map_grids.is_empty():
@@ -272,13 +273,37 @@ func _build_top_bar() -> void:
 	reward_lbl.position = Vector2(370, 68)
 	bar.add_child(reward_lbl)
 
-	# -- 骰子花色历史 --
+	# -- 紧凑属性行（18词条中的核心战斗属性，8列） --
+	var stat_defs := [
+		{ "name": "ATK",    "key": "atk",     "fmt": "%d",      "icon": "⚔️" },
+		{ "name": "DEF",    "key": "def",     "fmt": "%d",      "icon": "🛡️" },
+		{ "name": "HP",     "key": "hp",      "fmt": "%d",      "icon": "❤️" },
+		{ "name": "SPD",    "key": "spd",     "fmt": "%d",      "icon": "👟" },
+		{ "name": "LUK",    "key": "luk",     "fmt": "%d",      "icon": "🍀" },
+		{ "name": "暴击",   "key": "crit",    "fmt": "%d%%",    "icon": "💥" },
+		{ "name": "闪避",   "key": "dodge",   "fmt": "%d%%",    "icon": "💨" },
+		{ "name": "格挡",   "key": "block",   "fmt": "%d%%",    "icon": "🛡️" },
+	]
+	var stat_x: float = 112.0
+	var stat_y: float = 82.0
+	for si in range(stat_defs.size()):
+		var sd: Dictionary = stat_defs[si]
+		var sl: Label = Label.new()
+		sl.name = "StatLabel_" + sd["key"]
+		sl.text = sd["icon"] + " --"
+		sl.add_theme_font_size_override("font_size", 11)
+		sl.add_theme_color_override("font_color", Color(0.6, 0.7, 0.8))
+		sl.position = Vector2(stat_x, stat_y)
+		stat_x += 58
+		bar.add_child(sl)
+
+	# -- 骰子花色历史（移到紧凑属性下方或使用tooltip替代） --
 	var dice_hist := Label.new()
 	dice_hist.name = "DiceHistLabel"
-	dice_hist.text = "花色记录: "
-	dice_hist.add_theme_font_size_override("font_size", 12)
-	dice_hist.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
-	dice_hist.position = Vector2(112, 84)
+	dice_hist.text = "花色: "
+	dice_hist.add_theme_font_size_override("font_size", 10)
+	dice_hist.add_theme_color_override("font_color", Color(0.4, 0.45, 0.5))
+	dice_hist.position = Vector2(stat_x + 4, stat_y + 1)
 	bar.add_child(dice_hist)
 
 	# ============ 右侧：掷骰点数 + 花色 + 牌型记录 ============
@@ -1058,6 +1083,32 @@ func _refresh_top_bar() -> void:
 	var rv_lbl: Label = $TopBar/ReviveLabel as Label
 	if rv_lbl:
 		rv_lbl.text = str(player_revive) + "/" + str(player_max_revive)
+	_refresh_compact_stats()
+
+
+## 刷新顶部栏紧凑属性行（装备/天命/神buff变化时调用）
+func _refresh_compact_stats() -> void:
+	var ps: Dictionary = _calc_player_stats()
+	var stat_keys := [
+		{ "key": "atk",   "fmt": "⚔️%d" },
+		{ "key": "def",   "fmt": "🛡️%d" },
+		{ "key": "hp",    "fmt": "❤️%d" },
+		{ "key": "spd",   "fmt": "👟%d" },
+		{ "key": "luk",   "fmt": "🍀%d" },
+		{ "key": "crit",  "fmt": "💥%d%%" },
+		{ "key": "dodge", "fmt": "💨%d%%" },
+		{ "key": "block", "fmt": "🛡%d%%" },
+	]
+	for sk in stat_keys:
+		var lbl: Label = $TopBar.get_node_or_null("StatLabel_" + sk["key"]) as Label
+		if lbl:
+			var val = ps.get(sk["key"], 0)
+			lbl.text = sk["fmt"] % val
+			# 数值>0高亮
+			if typeof(val) == TYPE_INT and val > 0:
+				lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
+			else:
+				lbl.add_theme_color_override("font_color", Color(0.6, 0.7, 0.8))
 
 
 func _refresh_grid_display() -> void:
@@ -2077,15 +2128,13 @@ func _on_unequip_instance(slot_name: String) -> void:
 		if equip_instances[i].get("uid", -1) == uid:
 			equip_instances[i]["equipped"] = false
 			print("[DEBUG] 卸下完成:", equip_instances[i].get("base_name","?"), "←", slot_name)
-			# 卸下装备后关闭属性面板，下次打开可见新值
-			var sp2: Node = get_node_or_null("StatsPanel")
-			if sp2:
-				sp2.queue_free()
+			_refresh_all_stats_panels()
 			return
 	# 没找到原始条目（装备来自宝箱等直接装备的情况），追加
 	eqp["equipped"] = false
 	equip_instances.append(eqp)
 	print("[DEBUG] 卸下: 原始条目未找到，追加")
+	_refresh_all_stats_panels()
 
 
 func _on_equip_instance(idx: int) -> void:
@@ -2107,11 +2156,18 @@ func _on_equip_instance(idx: int) -> void:
 	eqp["equipped"] = true
 	var ok: bool = equipment.equip_instance(slot_name, eqp)
 	print("[DEBUG] equip_instance returned: ", ok, " slot: ", slot_name, " name: ", eqp.get("base_name","?"))
-	# 装换装备后关闭属性面板，下次打开可见新值
+	_refresh_all_stats_panels()
+	print("[装备] 穿戴:", EquipGenCls.full_name(eqp), "→", slot_name)
+
+
+## 统一刷新所有属性面板（装备/天命/神buff变更后调用）
+func _refresh_all_stats_panels() -> void:
+	# 1. 刷新顶部栏紧凑属性
+	_refresh_top_bar()
+	# 2. 如果属性详情面板打开，关闭它（下次打开看到新值）
 	var sp: Node = get_node_or_null("StatsPanel")
 	if sp:
 		sp.queue_free()
-	print("[装备] 穿戴:", EquipGenCls.full_name(eqp), "→", slot_name)
 
 
 ## 装备分解面板
@@ -2344,22 +2400,34 @@ func _on_item_action(slot_idx: int) -> void:
 
 
 ## ============ 主角属性详情面板 ============
-## ============ 主角属性计算 ============
+## ============ 主角属性计算（覆盖全部18词条 + 主属性 + 预留系统接口）============
 func _calc_player_stats() -> Dictionary:
 	var lv: int = player_level
 	var hp_base: int = 500 + (lv - 1) * 80
 	var atk_base: int = 25 + (lv - 1) * 2
 	var def_base: int = 15 + (lv - 1) * 1
+
+	# --- 基础三围（装备累加） ---
 	var hp_equip: int = 0
 	var atk_equip: int = 0
 	var def_equip: int = 0
-	var spd: int = 0
-	var luk: int = 0
-	var crit: float = 0
-	var critdmg: float = 0
-	var hit: float = 0
-	var dodge: float = 0
-	var block: float = 0
+
+	# --- 战斗属性 ---
+	var spd: int = 0          # 速度
+	var luk: int = 0          # 幸运
+	var crit: float = 0       # 暴击率
+	var critdmg: float = 0    # 暴击伤害
+	var hit: float = 0        # 命中率
+	var dodge: float = 0      # 闪避率
+	var block: float = 0      # 格挡率
+
+	# --- 功能属性（18词条新收录） ---
+	var skill_dmg: float = 0   # 技能伤害%
+	var cd_reduce: float = 0   # 冷却缩减%
+	var regen: float = 0       # 回血/步
+	var lifesteal: float = 0   # 吸血%
+	var gold_bonus: float = 0  # 金币加成%
+	var exp_bonus: float = 0   # 经验加成%
 
 	# 遍历已装备的
 	for ei in range(equip_instances.size()):
@@ -2376,37 +2444,109 @@ func _calc_player_stats() -> Dictionary:
 			"防御力":   def_equip += int(mv * mult)
 			"速度":     spd += int(mv)
 			"暴击率":   crit += mv
-			"技能伤害": pass
+			"技能伤害": skill_dmg += mv
 			"格挡率":   block += mv
 			"闪避率":   dodge += mv
 
-		# 词条加成
+		# 词条加成（全部18条）
 		for aff in ep.get("affixes", []):
 			var av: float = aff.get("value", 0.0)
 			match aff.get("name", ""):
-				"攻击%", "攻击(数值)": atk_equip += int(av)
-				"防御%", "防御(数值)": def_equip += int(av)
-				"生命%": hp_equip += int(hp_base * av / 100.0)
-				"速度": spd += int(av)
-				"幸运": luk += int(av)
-				"暴击率": crit += av
-				"暴击伤害": critdmg += av
-				"命中": hit += av
-				"闪避率": dodge += av
-				"格挡率": block += av
+				"攻击%":      atk_equip += int(atk_base * av / 100.0)
+				"攻击(数值)":  atk_equip += int(av)
+				"防御%":      def_equip += int(def_base * av / 100.0)
+				"防御(数值)":  def_equip += int(av)
+				"生命%":      hp_equip += int(hp_base * av / 100.0)
+				"生命(数值)":  hp_equip += int(av)
+				"速度":       spd += int(av)
+				"幸运":       luk += int(av)
+				"暴击率":     crit += av
+				"暴击伤害":   critdmg += av
+				"命中":       hit += av
+				"闪避率":     dodge += av
+				"格挡率":     block += av
+				"技能伤害":   skill_dmg += av
+				"冷却缩减":   cd_reduce += av
+				"回血":       regen += av
+				"吸血":       lifesteal += av
+				"金币加成":   gold_bonus += av
+				"经验加成":   exp_bonus += av
+
+	# --- 预留：天命卡加成（TODO: Phase 3） ---
+	var fate_bonus: Dictionary = _calc_fate_bonus()
+	spd       += fate_bonus.get("spd", 0)
+	luk       += fate_bonus.get("luk", 0)
+	crit      += fate_bonus.get("crit", 0.0)
+	skill_dmg += fate_bonus.get("skill_dmg", 0.0)
+	gold_bonus += fate_bonus.get("gold_bonus", 0.0)
+
+	# --- 预留：神祇祝福（TODO: Phase 3） ---
+	var deity_bonus: Dictionary = _calc_deity_bonus()
+	atk_equip += deity_bonus.get("atk", 0)
+	def_equip += deity_bonus.get("def", 0)
+	hp_equip  += deity_bonus.get("hp", 0)
+	critdmg   += deity_bonus.get("critdmg", 0.0)
 
 	return {
+		# 基础三围
 		"hp": hp_base + hp_equip, "hp_base": hp_base, "hp_equip": hp_equip,
 		"atk": atk_base + atk_equip, "atk_base": atk_base, "atk_equip": atk_equip,
 		"def": def_base + def_equip, "def_base": def_base, "def_equip": def_equip,
+		# 战斗属性
 		"spd": spd, "luk": luk,
 		"crit": int(5 + crit), "critdmg": int(150 + critdmg),
 		"hit": int(100 + hit), "dodge": int(dodge), "block": int(block),
+		# 功能属性（18词条全部）
+		"skill_dmg": int(skill_dmg), "cd_reduce": int(cd_reduce),
+		"regen": int(regen), "lifesteal": int(lifesteal),
+		"gold_bonus": int(gold_bonus), "exp_bonus": int(exp_bonus),
 	}
 
 
+## ============================================================
+## 预留接口：天命卡系统（Phase 3 实现）
+## 天命卡在命运格获取，提供永久属性加成
+## ============================================================
+## 天命卡数据暂存（类型→数量）
+var _fate_cards: Dictionary = {}   # { "攻击强化": 2, "金币达人": 1, ... }
+## 天命卡效果定义（未实装，仅预留结构）
+## const FATE_CARD_EFFECTS = { "攻击强化": {"atk%": 5}, "金币达人": {"gold": 10}, ... }
+
+## 计算天命卡对属性的总加成
+func _calc_fate_bonus() -> Dictionary:
+	# TODO Phase 3: 遍历 _fate_cards，累加各卡效果
+	return {}   # 暂返回空
+
+## 获得一张天命卡
+func _apply_fate_card(card_name: String) -> void:
+	# TODO Phase 3: 检查重复/上限，写入 _fate_cards，飘字提示
+	_fate_cards[card_name] = _fate_cards.get(card_name, 0) + 1
+	_refresh_all_stats_panels()
+
+
+## ============================================================
+## 预留接口：神祇祝福系统（Phase 3 实现）
+## 走到神祇格随机获得 buff，持续 N 场战斗
+## ============================================================
+## 神祇祝福数据（名称→剩余场次）
+var _deity_buffs: Dictionary = {}   # { "战神祝福": 5, "财神眷顾": 3, ... }
+## 神祇祝福效果定义（未实装，仅预留结构）
+## const DEITY_BUFF_EFFECTS = { "战神祝福": {"atk": 50}, "财神眷顾": {"gold": 20}, ... }
+
+## 计算当前神祇祝福的属性加成
+func _calc_deity_bonus() -> Dictionary:
+	# TODO Phase 3: 遍历 _deity_buffs，累加各祝福效果
+	return {}   # 暂返回空
+
+## 获得神祇祝福
+func _apply_deity_buff(buff_name: String, turns: int) -> void:
+	# TODO Phase 3: 覆盖同类型/叠层，写入 _deity_buffs，飘字提示
+	_deity_buffs[buff_name] = turns
+	_refresh_all_stats_panels()
+
+
 func _show_stats_panel() -> void:
-	# 移除旧面板
+	# 移除旧面板（点击切换）
 	var old: Node = get_node_or_null("StatsPanel")
 	if old:
 		old.queue_free()
@@ -2414,13 +2554,13 @@ func _show_stats_panel() -> void:
 
 	var panel: Panel = Panel.new()
 	panel.name = "StatsPanel"
-	panel.position = Vector2(140, 40)
-	panel.size = Vector2(500, 620)
+	panel.position = Vector2(90, 30)
+	panel.size = Vector2(600, 640)
 	_panel_style(panel, Color(0.08, 0.09, 0.15))
 
 	# 标题
 	var title: Label = Label.new()
-	title.text = "📋 " + player_name + "  Lv." + str(player_level)
+	title.text = "📋 " + player_name + "  Lv." + str(player_level) + "/100"
 	title.add_theme_font_size_override("font_size", 22)
 	title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
 	title.position = Vector2(20, 12)
@@ -2429,7 +2569,7 @@ func _show_stats_panel() -> void:
 	# 经验条
 	var exp_bar: ProgressBar = ProgressBar.new()
 	exp_bar.position = Vector2(20, 44)
-	exp_bar.size = Vector2(460, 14)
+	exp_bar.size = Vector2(560, 14)
 	exp_bar.value = player_exp
 	exp_bar.max_value = player_exp_max
 	_bar_style(exp_bar, Color(0.15, 0.35, 0.6))
@@ -2442,81 +2582,104 @@ func _show_stats_panel() -> void:
 	exp_lbl.position = Vector2(20, 60)
 	panel.add_child(exp_lbl)
 
-	# 属性列表（使用真实计算的数值）
+	# 属性列表（使用真实计算的数值）—— 双列16行
 	var ps: Dictionary = _calc_player_stats()
+	var def_rate: float = GameConfigCls.calc_def_reduction(float(ps["def"])) * 100.0
+
+	# 格式: { icon, name, value, desc }
+	# 左列 [0..7]  右列 [8..15]
 	var stats: Array[Dictionary] = [
-		{ "icon": "❤️", "name": "生命值 (HP)",   "value": str(ps["hp"]), "raw": ps["hp_base"], "eqp": ps["hp_equip"], "desc": "归零则战斗失败，消耗1枚复活币复活。\n公式: 500 + (Lv-1)×80  |  Lv.100 = 8,420" },
-		{ "icon": "⚔️", "name": "攻击力 (ATK)",  "value": str(ps["atk"]), "raw": ps["atk_base"], "eqp": ps["atk_equip"], "desc": "公式: 25 + (Lv-1)×2  |  Lv.100 = 223\n受自由属性点(+1.8%/点)和装备词条加成" },
-		{ "icon": "🛡️", "name": "防御力 (DEF)",  "value": str(ps["def"]), "raw": ps["def_base"], "eqp": ps["def_equip"], "desc": "减伤率 = DEF/(DEF+400)\n400防 = 50%减伤  |  无等级衰减" },
-		{ "icon": "👟", "name": "速度 (SPD)",    "value": str(ps["spd"]), "raw": 0, "eqp": ps["spd"], "desc": "每点-0.8%技能CD（上限50%，63点封顶）\n实际CD = 基础CD × (1 - 速度%)" },
-		{ "icon": "🍀", "name": "幸运 (LUK)",    "value": str(ps["luk"]), "raw": 0, "eqp": ps["luk"], "desc": "每点+1.5%稀有掉落/好事件概率（无上限）\n影响宝箱品质、命运事件、战斗掉落" },
-		{ "icon": "💥", "name": "暴击率",        "value": str(ps["crit"]) + "%", "raw": 5, "eqp": ps["crit"], "desc": "攻击时触发暴击的概率。\n暴击伤害 = 攻击力 × 暴击倍率" },
-		{ "icon": "💢", "name": "暴击伤害",       "value": str(ps["critdmg"]) + "%", "raw": 150, "eqp": ps["critdmg"], "desc": "暴击时的伤害倍率。\n基础150%，装备/宝石可提高" },
-		{ "icon": "🎯", "name": "命中率",        "value": str(ps["hit"]) + "%", "raw": 100, "eqp": ps["hit"], "desc": "决定攻击是否命中。\n可抵消目标的闪避率" },
-		{ "icon": "💨", "name": "闪避率",        "value": str(ps["dodge"]) + "%", "raw": 0, "eqp": ps["dodge"], "desc": "完全躲避攻击的概率。\n实际闪避 = 我方闪避 - 敌方命中" },
-		{ "icon": "🛡️", "name": "格挡率",        "value": str(ps["block"]) + "%", "raw": 0, "eqp": ps["block"], "desc": "格挡后伤害减半。\n暴击+格挡同时触发 = 暴击×0.5" },
+		# === 左列：基础 + 核心战斗 ===
+		{ "icon": "❤️", "name": "生命值",     "value": str(ps["hp"]),           "desc": "归零则战斗失败，消耗复活币。\n公式: 500 + (Lv-1)×80  |  Lv.100=8,420" },
+		{ "icon": "⚔️", "name": "攻击力",     "value": str(ps["atk"]),          "desc": "公式: 25 + (Lv-1)×2  |  Lv.100=223\n受自由属性点 +1.8%/点" },
+		{ "icon": "🛡️", "name": "防御力",     "value": str(ps["def"]),          "desc": "减伤率 = DEF/(DEF+400)\n当前减伤: %.1f%%  |  无等级衰减" % def_rate },
+		{ "icon": "💥", "name": "暴击率",     "value": str(ps["crit"]) + "%",   "desc": "攻击时触发暴击概率。基础5%+装备。" },
+		{ "icon": "💢", "name": "暴击伤害",   "value": str(ps["critdmg"]) + "%","desc": "暴击时伤害倍率。基础150%+装备。" },
+		{ "icon": "🎯", "name": "命中率",     "value": str(ps["hit"]) + "%",    "desc": "决定攻击是否命中。基础100%。" },
+		{ "icon": "💨", "name": "闪避率",     "value": str(ps["dodge"]) + "%",  "desc": "完全躲避攻击的概率。可被命中抵消。" },
+		{ "icon": "🛡️", "name": "格挡率",     "value": str(ps["block"]) + "%",  "desc": "格挡后伤害减半。暴击×格挡=暴击×0.5" },
+
+		# === 右列：功能 + 增益 ===
+		{ "icon": "👟", "name": "速度",       "value": str(ps["spd"]),          "desc": "每点 -0.8% CD（上限50%；63点封顶）" },
+		{ "icon": "🍀", "name": "幸运",       "value": str(ps["luk"]),          "desc": "每点 +1.5% 稀有/好事件（无上限）" },
+		{ "icon": "⚡", "name": "技能伤害",   "value": "+" + str(ps["skill_dmg"]) + "%",  "desc": "提升主动技能最终伤害。" },
+		{ "icon": "⏱️", "name": "冷却缩减",   "value": str(ps["cd_reduce"]) + "%","desc": "缩短技能冷却时间。与速度叠加。" },
+		{ "icon": "💚", "name": "回血",       "value": str(ps["regen"]) + "/步", "desc": "每走一步恢复 HP 百分比。" },
+		{ "icon": "🩸", "name": "吸血",       "value": str(ps["lifesteal"]) + "%","desc": "造成伤害时回复伤害×%的HP。" },
+		{ "icon": "🪙", "name": "金币加成",   "value": "+" + str(ps["gold_bonus"]) + "%", "desc": "所有金币获取额外增加此比例。" },
+		{ "icon": "📖", "name": "经验加成",   "value": "+" + str(ps["exp_bonus"]) + "%",  "desc": "所有经验获取额外增加此比例。" },
 	]
 
 	var sy: float = 88.0
-	for st in stats:
+	var col_w: float = 286.0
+	var col_gap: float = 12.0
+	var row_h: float = 34.0
+	var row_gap: float = 2.0
+
+	for i in range(16):
+		var col: int = 1 if i >= 8 else 0
+		var row: int = i % 8
+		var rx: float = 16.0 + col * (col_w + col_gap)
+		var ry: float = sy + row * (row_h + row_gap)
+
+		var st: Dictionary = stats[i]
+
 		# 行背景
-		var row: ColorRect = ColorRect.new()
-		row.position = Vector2(16, sy)
-		row.size = Vector2(468, 44)
-		row.color = Color(0.10, 0.11, 0.18)
-		panel.add_child(row)
+		var row_bg: ColorRect = ColorRect.new()
+		row_bg.position = Vector2(rx, ry)
+		row_bg.size = Vector2(col_w, row_h)
+		row_bg.color = Color(0.10, 0.11, 0.18)
+		panel.add_child(row_bg)
 
 		# 图标
 		var icon: Label = Label.new()
 		icon.text = st["icon"]
-		icon.add_theme_font_size_override("font_size", 18)
-		icon.position = Vector2(24, sy + 8)
+		icon.add_theme_font_size_override("font_size", 16)
+		icon.position = Vector2(rx + 6, ry + 6)
 		panel.add_child(icon)
 
 		# 名称
 		var name_lbl: Label = Label.new()
 		name_lbl.text = st["name"]
-		name_lbl.add_theme_font_size_override("font_size", 14)
-		name_lbl.add_theme_color_override("font_color", Color(0.8, 0.85, 0.9))
-		name_lbl.position = Vector2(55, sy + 10)
+		name_lbl.add_theme_font_size_override("font_size", 12)
+		name_lbl.add_theme_color_override("font_color", Color(0.7, 0.75, 0.8))
+		name_lbl.position = Vector2(rx + 32, ry + 7)
 		panel.add_child(name_lbl)
 
-		# 数值
+		# 数值（右侧对齐）
 		var val_lbl: Label = Label.new()
 		val_lbl.text = st["value"]
-		val_lbl.add_theme_font_size_override("font_size", 16)
+		val_lbl.add_theme_font_size_override("font_size", 14)
 		val_lbl.add_theme_color_override("font_color", Color(1.0, 0.9, 0.3))
 		val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		val_lbl.position = Vector2(194, sy + 8)
-		val_lbl.size = Vector2(120, 24)
+		val_lbl.position = Vector2(rx + 150, ry + 6)
+		val_lbl.size = Vector2(120, 20)
 		panel.add_child(val_lbl)
 
-		# 点击查看说明
+		# ? 按钮
 		var btn: Button = Button.new()
 		btn.text = "?"
-		btn.position = Vector2(435, sy + 8)
-		btn.size = Vector2(36, 24)
-		btn.add_theme_font_size_override("font_size", 12)
+		btn.position = Vector2(rx + col_w - 38, ry + 4)
+		btn.size = Vector2(28, 22)
+		btn.add_theme_font_size_override("font_size", 10)
 		_btn_style_mini(btn, Color(0.15, 0.22, 0.38))
 		var desc: String = st["desc"]
 		btn.pressed.connect(func(): _show_stat_tooltip(st["name"], desc))
 		panel.add_child(btn)
 
-		sy += 47.0
-
 	# 底部信息
-	sy += 10.0
+	var footer_y: float = sy + 8 * (row_h + row_gap) + 12.0
 	var footer: Label = Label.new()
 	footer.text = "💰 " + str(player_gold) + "金币  |  ♻️ " + str(player_revive) + "/" + str(player_max_revive) + "复活币  |  位置 " + str(player_grid_index) + "/" + str(map_total_grids) + "  |  Lv上限100  |  K_gr=2.50"
-	footer.add_theme_font_size_override("font_size", 12)
+	footer.add_theme_font_size_override("font_size", 11)
 	footer.add_theme_color_override("font_color", Color(0.5, 0.55, 0.6))
-	footer.position = Vector2(20, sy)
+	footer.position = Vector2(20, footer_y)
 	panel.add_child(footer)
 
 	# 关闭
 	var close: Button = Button.new()
 	close.text = "✕"
-	close.position = Vector2(458, 8)
+	close.position = Vector2(560, 8)
 	close.size = Vector2(30, 28)
 	_btn_style_mini(close, Color(0.3, 0.1, 0.1))
 	close.pressed.connect(panel.queue_free)
