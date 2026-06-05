@@ -1515,15 +1515,15 @@ func _build_inventory_panel() -> void:
 				slot_btn.size = Vector2(50, 50)
 				_btn_transparent2(slot_btn)
 				var esn: String = es["name"]
-				slot_btn.button_down.connect(func():
-					if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
-						_on_unequip_instance(esn)
-						panel.queue_free()
-						_show_inventory_panel()
-					else:
-						_close_all_tooltips()
-						_show_equip_tooltip(eqp, -1, esn, panel)
-				)
+				slot_btn.gui_input.connect(func(ev: InputEvent):
+					if ev is InputEventMouseButton and ev.pressed:
+						if ev.button_index == MOUSE_BUTTON_RIGHT:
+							_on_unequip_instance(esn)
+							_show_inventory_panel()
+						else:
+							_close_all_tooltips()
+							_show_equip_tooltip(eqp, -1, esn, panel)
+					)
 				equip_panel.add_child(slot_btn)
 
 	# 套装统计
@@ -1820,26 +1820,26 @@ func _build_equip_tab(area: Panel, main_panel: Panel) -> void:
 		ename.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		area.add_child(ename)
 
-		# 点击 → tooltip / 右键快速装备
+		# 点击 → tooltip, 右键快速装备
 		var btn: Button = Button.new()
 		btn.flat = true
 		btn.position = Vector2(x, y)
 		btn.size = Vector2(icon_s, icon_s + 16)
 		_btn_transparent2(btn)
 		var eidx: int = ei
-		btn.button_down.connect(func():
-			if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
-				_on_equip_instance(eidx)
-				main_panel.queue_free()
-				_show_inventory_panel()
-			else:
-				_close_all_tooltips()
-				var s: String = eqp.get("slot", "")
-				var weq: Dictionary = equipment.get_slot_item(s)
-				if not weq.is_empty():
-					_show_compare_tooltips(eqp, weq, s, main_panel)
+		btn.gui_input.connect(func(ev: InputEvent):
+			if ev is InputEventMouseButton and ev.pressed:
+				if ev.button_index == MOUSE_BUTTON_RIGHT:
+					_on_equip_instance(eidx)
+					_show_inventory_panel()
 				else:
-					_show_equip_tooltip(eqp, eidx, "", main_panel)
+					_close_all_tooltips()
+					var s: String = eqp.get("slot", "")
+					var weq: Dictionary = equipment.get_slot_item(s)
+					if not weq.is_empty():
+						_show_compare_tooltips(eqp, weq, s, main_panel)
+					else:
+						_show_equip_tooltip(eqp, eidx, "", main_panel)
 		)
 		area.add_child(btn)
 
