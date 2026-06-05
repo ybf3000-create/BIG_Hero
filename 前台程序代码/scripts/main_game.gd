@@ -1617,17 +1617,17 @@ func _rebuild_filters(item_area: Panel, main_panel: Panel) -> void:
 	for qi in range(qlabels.size()):
 		var qb: Button = Button.new()
 		qb.text = qlabels[qi]
-		qb.position = Vector2(4 + qi * 68, 4)
-		qb.size = Vector2(60, 24)
+		qb.position = Vector2(4 + qi * 52, 4)
+		qb.size = Vector2(46, 22)
 		qb.add_theme_font_size_override("font_size", 12)
 		var qv: int = qi - 1
 		var selected: bool = (qv == -1 and _inv_filter_quality.is_empty()) or _inv_filter_quality.has(qv)
 		var clr: Color = qclrvals[qi]
-		_btn_style_mini(qb, clr.darkened(0.5) if not selected else clr)
+		_btn_style_mini(qb, clr.darkened(0.3) if not selected else clr.lightened(0.1))
 		if qi == 0:
-			qb.add_theme_color_override("font_color", Color.WHITE)
+			qb.add_theme_color_override("font_color", Color(1,1,1))
 		else:
-			qb.add_theme_color_override("font_color", clr if selected else clr.darkened(0.5))
+			qb.add_theme_color_override("font_color", clr.lightened(0.3) if selected else clr)
 		qb.pressed.connect(func():
 			if qv == -1:
 				_inv_filter_quality.clear()
@@ -1655,13 +1655,13 @@ func _rebuild_filters(item_area: Panel, main_panel: Panel) -> void:
 		for si in range(slabels.size()):
 			var sb: Button = Button.new()
 			sb.text = slabels[si]
-			sb.position = Vector2(4 + si * 58, 32)
-			sb.size = Vector2(52, 20)
+			sb.position = Vector2(4 + si * 46, 32)
+			sb.size = Vector2(42, 20)
 			sb.add_theme_font_size_override("font_size", 12)
 			var sv: int = si - 1
 			var ssel: bool = (sv == -1 and _inv_filter_slot.is_empty()) or _inv_filter_slot.has(sv)
-			_btn_style_mini(sb, Color(0.10, 0.12, 0.25) if not ssel else Color(0.2, 0.35, 0.55))
-			sb.add_theme_color_override("font_color", Color(1,1,1) if ssel else Color(0.4,0.45,0.5))
+			_btn_style_mini(sb, Color(0.15, 0.18, 0.35) if not ssel else Color(0.25, 0.40, 0.60))
+			sb.add_theme_color_override("font_color", Color(1,1,1) if ssel else Color(0.7,0.75,0.8))
 			sb.pressed.connect(func():
 				if sv == -1:
 					_inv_filter_slot.clear()
@@ -2011,7 +2011,10 @@ func _show_equip_tooltip(eqp: Dictionary, idx: int, slot_name: String, main_pane
 		)
 		tip.add_child(unequip_btn)
 
-	main_panel.add_child(tip)
+	# 装备/卸下按钮结束
+
+	# 把 tip 放到 root 层，确保在遮罩层之上
+	add_child(tip)
 
 
 func _ensure_overlay() -> void:
@@ -2316,6 +2319,67 @@ func _on_item_action(slot_idx: int) -> void:
 
 
 ## ============ 主角属性详情面板 ============
+## ============ 主角属性计算 ============
+func _calc_player_stats() -> Dictionary:
+	var lv: int = player_level
+	var hp_base: int = 500 + (lv - 1) * 80
+	var atk_base: int = 25 + (lv - 1) * 2
+	var def_base: int = 15 + (lv - 1) * 1
+	var hp_equip: int = 0
+	var atk_equip: int = 0
+	var def_equip: int = 0
+	var spd: int = 0
+	var luk: int = 0
+	var crit: float = 0
+	var critdmg: float = 0
+	var hit: float = 0
+	var dodge: float = 0
+	var block: float = 0
+
+	# 遍历已装备的
+	for ei in range(equip_instances.size()):
+		var ep: Dictionary = equip_instances[ei]
+		if not ep.get("equipped", false):
+			continue
+		var mv: float = ep.get("main_value", 0.0)
+		var ms: String = ep.get("main_stat", "")
+		var enhance: int = ep.get("enhance", 0)
+		var mult: float = 1.0 + enhance * 0.03
+		match ms:
+			"生命值":   hp_equip += int(mv * mult)
+			"攻击力":   atk_equip += int(mv * mult)
+			"防御力":   def_equip += int(mv * mult)
+			"速度":     spd += int(mv)
+			"暴击率":   crit += mv
+			"技能伤害": pass
+			"格挡率":   block += mv
+			"闪避率":   dodge += mv
+
+		# 词条加成
+		for aff in ep.get("affixes", []):
+			var av: float = aff.get("value", 0.0)
+			match aff.get("name", ""):
+				"攻击%", "攻击(数值)": atk_equip += int(av)
+				"防御%", "防御(数值)": def_equip += int(av)
+				"生命%": hp_equip += int(hp_base * av / 100.0)
+				"速度": spd += int(av)
+				"幸运": luk += int(av)
+				"暴击率": crit += av
+				"暴击伤害": critdmg += av
+				"命中": hit += av
+				"闪避率": dodge += av
+				"格挡率": block += av
+
+	return {
+		"hp": hp_base + hp_equip, "hp_base": hp_base, "hp_equip": hp_equip,
+		"atk": atk_base + atk_equip, "atk_base": atk_base, "atk_equip": atk_equip,
+		"def": def_base + def_equip, "def_base": def_base, "def_equip": def_equip,
+		"spd": spd, "luk": luk,
+		"crit": int(5 + crit), "critdmg": int(150 + critdmg),
+		"hit": int(100 + hit), "dodge": int(dodge), "block": int(block),
+	}
+
+
 func _show_stats_panel() -> void:
 	# 移除旧面板
 	var old: Node = get_node_or_null("StatsPanel")
@@ -2353,18 +2417,19 @@ func _show_stats_panel() -> void:
 	exp_lbl.position = Vector2(20, 60)
 	panel.add_child(exp_lbl)
 
-	# 属性列表
+	# 属性列表（使用真实计算的数值）
+	var st: Dictionary = _calc_player_stats()
 	var stats: Array[Dictionary] = [
-		{ "icon": "❤️", "name": "生命值 (HP)",   "value": "500", "desc": "归零则战斗失败，消耗1枚复活币复活。\n每级+80" },
-		{ "icon": "⚔️", "name": "攻击力 (ATK)",  "value": "25", "desc": "基础攻击力，与装备攻击力相加后\n受自由属性点和装备词条加成" },
-		{ "icon": "🛡️", "name": "防御力 (DEF)",  "value": "15", "desc": "决定受到的伤害减免。\n每点防御→减伤系数增加" },
-		{ "icon": "👟", "name": "速度 (SPD)",    "value": "0",  "desc": "每点-1%出手CD（上限50%）。\n3.0秒× (1-速度%) = 实际CD" },
-		{ "icon": "🍀", "name": "幸运 (LUK)",    "value": "0",  "desc": "每点+2%稀有掉落/好事件概率。\n影响宝箱品质、命运事件、战斗掉落" },
-		{ "icon": "💥", "name": "暴击率",        "value": "5%", "desc": "攻击时触发暴击的概率。\n暴击伤害=攻击力×暴击倍率" },
-		{ "icon": "💢", "name": "暴击伤害",       "value": "150%","desc": "暴击时的伤害倍率。\n基础150%，装备/宝石可提高" },
-		{ "icon": "🎯", "name": "命中率",        "value": "100%","desc": "决定攻击是否命中。\n可抵消目标的闪避率" },
-		{ "icon": "💨", "name": "闪避率",        "value": "0%", "desc": "完全躲避攻击的概率。\n实际闪避=我方闪避-敌方命中" },
-		{ "icon": "🛡️", "name": "格挡率",        "value": "0%", "desc": "格挡后伤害减半。\n暴击+格挡同时触发=暴击×0.5" },
+		{ "icon": "❤️", "name": "生命值 (HP)",   "value": str(st["hp"]), "raw": st["hp_base"], "eqp": st["hp_equip"], "desc": "归零则战斗失败，消耗1枚复活币复活。\n每级+80" },
+		{ "icon": "⚔️", "name": "攻击力 (ATK)",  "value": str(st["atk"]), "raw": st["atk_base"], "eqp": st["atk_equip"], "desc": "基础攻击力，与装备攻击力相加后\n受自由属性点和装备词条加成" },
+		{ "icon": "🛡️", "name": "防御力 (DEF)",  "value": str(st["def"]), "raw": st["def_base"], "eqp": st["def_equip"], "desc": "决定受到的伤害减免。\n每点防御→减伤系数增加" },
+		{ "icon": "👟", "name": "速度 (SPD)",    "value": str(st["spd"]), "raw": 0, "eqp": st["spd"], "desc": "每点-1%出手CD（上限50%）。\n3.0秒× (1-速度%) = 实际CD" },
+		{ "icon": "🍀", "name": "幸运 (LUK)",    "value": str(st["luk"]), "raw": 0, "eqp": st["luk"], "desc": "每点+2%稀有掉落/好事件概率。\n影响宝箱品质、命运事件、战斗掉落" },
+		{ "icon": "💥", "name": "暴击率",        "value": str(st["crit"]) + "%", "raw": 5, "eqp": st["crit"], "desc": "攻击时触发暴击的概率。\n暴击伤害=攻击力×暴击倍率" },
+		{ "icon": "💢", "name": "暴击伤害",       "value": str(st["critdmg"]) + "%", "raw": 150, "eqp": st["critdmg"], "desc": "暴击时的伤害倍率。\n基础150%，装备/宝石可提高" },
+		{ "icon": "🎯", "name": "命中率",        "value": str(st["hit"]) + "%", "raw": 100, "eqp": st["hit"], "desc": "决定攻击是否命中。\n可抵消目标的闪避率" },
+		{ "icon": "💨", "name": "闪避率",        "value": str(st["dodge"]) + "%", "raw": 0, "eqp": st["dodge"], "desc": "完全躲避攻击的概率。\n实际闪避=我方闪避-敌方命中" },
+		{ "icon": "🛡️", "name": "格挡率",        "value": str(st["block"]) + "%", "raw": 0, "eqp": st["block"], "desc": "格挡后伤害减半。\n暴击+格挡同时触发=暴击×0.5" },
 	]
 
 	var sy: float = 88.0
