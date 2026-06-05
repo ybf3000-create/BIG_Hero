@@ -176,7 +176,6 @@ static func generate(slot_name: String, level: int = 1) -> Dictionary:
 		"slot_type_id": EquipDataCls.SLOT_TYPE_ID.get(slot_name, 0),
 		"quality": quality,
 		"quality_name": EquipDataCls.QUALITY_NAMES.get(quality, "???"),
-		"quality_color": EquipDataCls.QUALITY_COLORS.get(quality, Color.GRAY),
 		"base_name": icon_info.get("name", "???"),
 		"icon": icon_info.get("icon", "❓"),
 		"main_stat": main["name"],
@@ -238,6 +237,4 @@ static func serialize(eqp: Dictionary) -> Dictionary:
 
 static func deserialize(data: Dictionary) -> Dictionary:
 	var d: Dictionary = data.duplicate(true)
-	if not d.has("quality_color"):
-		d["quality_color"] = EquipDataCls.QUALITY_COLORS.get(d.get("quality", 0), Color.GRAY)
 	return d
