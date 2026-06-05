@@ -1331,22 +1331,12 @@ var _inv_filter_quality: Array[int] = []   # 空=全部, 选中多个
 var _inv_filter_slot: Array[int] = []       # 空=全部, 选中多个
 
 func _show_inventory_panel() -> void:
-	# 已打开→关闭
+	# 移除旧面板（如有）
 	var old: Node = get_node_or_null("InventoryPanel")
 	if old:
 		old.get_parent().remove_child(old)
 		old.queue_free()
-		return
-
 	_auto_save()
-	_build_inventory_panel()
-
-
-func _refresh_inventory_panel() -> void:
-	var old: Node = get_node_or_null("InventoryPanel")
-	if old:
-		old.get_parent().remove_child(old)
-		old.queue_free()
 	_build_inventory_panel()
 
 
