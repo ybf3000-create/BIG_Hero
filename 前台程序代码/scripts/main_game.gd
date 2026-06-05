@@ -2418,18 +2418,18 @@ func _show_stats_panel() -> void:
 	panel.add_child(exp_lbl)
 
 	# 属性列表（使用真实计算的数值）
-	var st: Dictionary = _calc_player_stats()
+	var ps: Dictionary = _calc_player_stats()
 	var stats: Array[Dictionary] = [
-		{ "icon": "❤️", "name": "生命值 (HP)",   "value": str(st["hp"]), "raw": st["hp_base"], "eqp": st["hp_equip"], "desc": "归零则战斗失败，消耗1枚复活币复活。\n每级+80" },
-		{ "icon": "⚔️", "name": "攻击力 (ATK)",  "value": str(st["atk"]), "raw": st["atk_base"], "eqp": st["atk_equip"], "desc": "基础攻击力，与装备攻击力相加后\n受自由属性点和装备词条加成" },
-		{ "icon": "🛡️", "name": "防御力 (DEF)",  "value": str(st["def"]), "raw": st["def_base"], "eqp": st["def_equip"], "desc": "决定受到的伤害减免。\n每点防御→减伤系数增加" },
-		{ "icon": "👟", "name": "速度 (SPD)",    "value": str(st["spd"]), "raw": 0, "eqp": st["spd"], "desc": "每点-1%出手CD（上限50%）。\n3.0秒× (1-速度%) = 实际CD" },
-		{ "icon": "🍀", "name": "幸运 (LUK)",    "value": str(st["luk"]), "raw": 0, "eqp": st["luk"], "desc": "每点+2%稀有掉落/好事件概率。\n影响宝箱品质、命运事件、战斗掉落" },
-		{ "icon": "💥", "name": "暴击率",        "value": str(st["crit"]) + "%", "raw": 5, "eqp": st["crit"], "desc": "攻击时触发暴击的概率。\n暴击伤害=攻击力×暴击倍率" },
-		{ "icon": "💢", "name": "暴击伤害",       "value": str(st["critdmg"]) + "%", "raw": 150, "eqp": st["critdmg"], "desc": "暴击时的伤害倍率。\n基础150%，装备/宝石可提高" },
-		{ "icon": "🎯", "name": "命中率",        "value": str(st["hit"]) + "%", "raw": 100, "eqp": st["hit"], "desc": "决定攻击是否命中。\n可抵消目标的闪避率" },
-		{ "icon": "💨", "name": "闪避率",        "value": str(st["dodge"]) + "%", "raw": 0, "eqp": st["dodge"], "desc": "完全躲避攻击的概率。\n实际闪避=我方闪避-敌方命中" },
-		{ "icon": "🛡️", "name": "格挡率",        "value": str(st["block"]) + "%", "raw": 0, "eqp": st["block"], "desc": "格挡后伤害减半。\n暴击+格挡同时触发=暴击×0.5" },
+		{ "icon": "❤️", "name": "生命值 (HP)",   "value": str(ps["hp"]), "raw": ps["hp_base"], "eqp": ps["hp_equip"], "desc": "归零则战斗失败，消耗1枚复活币复活。\n每级+80" },
+		{ "icon": "⚔️", "name": "攻击力 (ATK)",  "value": str(ps["atk"]), "raw": ps["atk_base"], "eqp": ps["atk_equip"], "desc": "基础攻击力，与装备攻击力相加后\n受自由属性点和装备词条加成" },
+		{ "icon": "🛡️", "name": "防御力 (DEF)",  "value": str(ps["def"]), "raw": ps["def_base"], "eqp": ps["def_equip"], "desc": "决定受到的伤害减免。\n每点防御→减伤系数增加" },
+		{ "icon": "👟", "name": "速度 (SPD)",    "value": str(ps["spd"]), "raw": 0, "eqp": ps["spd"], "desc": "每点-1%出手CD（上限50%）。\n3.0秒× (1-速度%) = 实际CD" },
+		{ "icon": "🍀", "name": "幸运 (LUK)",    "value": str(ps["luk"]), "raw": 0, "eqp": ps["luk"], "desc": "每点+2%稀有掉落/好事件概率。\n影响宝箱品质、命运事件、战斗掉落" },
+		{ "icon": "💥", "name": "暴击率",        "value": str(ps["crit"]) + "%", "raw": 5, "eqp": ps["crit"], "desc": "攻击时触发暴击的概率。\n暴击伤害=攻击力×暴击倍率" },
+		{ "icon": "💢", "name": "暴击伤害",       "value": str(ps["critdmg"]) + "%", "raw": 150, "eqp": ps["critdmg"], "desc": "暴击时的伤害倍率。\n基础150%，装备/宝石可提高" },
+		{ "icon": "🎯", "name": "命中率",        "value": str(ps["hit"]) + "%", "raw": 100, "eqp": ps["hit"], "desc": "决定攻击是否命中。\n可抵消目标的闪避率" },
+		{ "icon": "💨", "name": "闪避率",        "value": str(ps["dodge"]) + "%", "raw": 0, "eqp": ps["dodge"], "desc": "完全躲避攻击的概率。\n实际闪避=我方闪避-敌方命中" },
+		{ "icon": "🛡️", "name": "格挡率",        "value": str(ps["block"]) + "%", "raw": 0, "eqp": ps["block"], "desc": "格挡后伤害减半。\n暴击+格挡同时触发=暴击×0.5" },
 	]
 
 	var sy: float = 88.0
