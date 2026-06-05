@@ -2045,6 +2045,14 @@ func _on_unequip_instance(slot_name: String) -> void:
 	var eqp: Dictionary = equipment.unequip(slot_name)
 	if eqp.is_empty():
 		return
+	# 在 equip_instances 中找到原始条目，标记为未装备
+	var uid: int = eqp.get("uid", -1)
+	for i in range(equip_instances.size()):
+		if equip_instances[i].get("uid", -1) == uid:
+			equip_instances[i]["equipped"] = false
+			print("[装备] 卸下:", equip_instances[i].get("base_name","?"), "←", slot_name)
+			return
+	# 没找到原始条目（装备来自宝箱等直接装备的情况），追加
 	eqp["equipped"] = false
 	equip_instances.append(eqp)
 	print("[装备] 卸下:", eqp.get("base_name","?"), "←", slot_name)
