@@ -1301,6 +1301,15 @@ func _qcolor(q: int) -> Color:
 func _show_float_text(text: String, clr: Color = Color.WHITE) -> void:
 	if _float_text_node and is_instance_valid(_float_text_node):
 		_float_text_node.queue_free()
+
+	# 确保浮字在最上层（使用独立 CanvasLayer）
+	var layer: CanvasLayer = get_node_or_null("FloatTextLayer")
+	if not layer:
+		layer = CanvasLayer.new()
+		layer.name = "FloatTextLayer"
+		layer.layer = 128  # 最高渲染层
+		add_child(layer)
+
 	var lbl: Label = Label.new()
 	lbl.text = text
 	lbl.add_theme_font_size_override("font_size", 22)
@@ -1309,7 +1318,7 @@ func _show_float_text(text: String, clr: Color = Color.WHITE) -> void:
 	lbl.position = Vector2((1280 - len(text) * 14) / 2.0, 280)
 	lbl.size = Vector2(len(text) * 14, 30)
 	lbl.modulate.a = 0.0
-	add_child(lbl)
+	layer.add_child(lbl)
 	_float_text_node = lbl
 
 	var tw := create_tween()
