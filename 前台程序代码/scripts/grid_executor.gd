@@ -51,18 +51,34 @@ static func _exec_home(ctx: Dictionary) -> Dictionary:
 	return { "event": "home", "data": { "message": "回到勇者之家" } }
 
 
-## ============ 战斗格 (先空着) ============
+## ============ 战斗格 ============
 static func _exec_battle(ctx: Dictionary) -> Dictionary:
-	return { "event": "battle", "data": { "message": "进入战斗！" } }
+	var lv: int = ctx.get("player_level", 1)
+	var exp_gain: int = int(mini(lv, 50) * randf_range(10, 18))
+	var gold_gain: int = int(mini(lv, 50) * randf_range(10, 18))
+	ctx["player_gold"] = ctx.get("player_gold", 0) + gold_gain
+	return { "event": "battle", "data": { "message": "⚔ 战斗胜利! +" + str(exp_gain) + "EXP +" + str(gold_gain) + "金", "exp_gain": exp_gain } }
 
 static func _exec_elite(ctx: Dictionary) -> Dictionary:
-	return { "event": "elite_battle", "data": { "message": "精英战斗！" } }
+	var lv: int = ctx.get("player_level", 1)
+	var exp_gain: int = int(mini(lv, 50) * randf_range(30, 45))
+	var gold_gain: int = int(mini(lv, 50) * randf_range(24, 40))
+	ctx["player_gold"] = ctx.get("player_gold", 0) + gold_gain
+	return { "event": "elite_battle", "data": { "message": "⚔ 精英战胜利! +" + str(exp_gain) + "EXP +" + str(gold_gain) + "金", "exp_gain": exp_gain } }
 
 static func _exec_boss(ctx: Dictionary) -> Dictionary:
-	return { "event": "boss", "data": { "message": "Boss 挑战！" } }
+	var lv: int = ctx.get("player_level", 1)
+	var exp_gain: int = int(mini(lv, 50) * randf_range(50, 80))
+	var gold_gain: int = int(mini(lv, 50) * randf_range(40, 60))
+	ctx["player_gold"] = ctx.get("player_gold", 0) + gold_gain
+	return { "event": "boss", "data": { "message": "👑 Boss战胜利! +" + str(exp_gain) + "EXP +" + str(gold_gain) + "金", "exp_gain": exp_gain } }
 
 static func _exec_challenge(ctx: Dictionary) -> Dictionary:
-	return { "event": "challenge", "data": { "message": "挑战格" } }
+	var lv: int = ctx.get("player_level", 1)
+	var exp_gain: int = int(mini(lv, 50) * randf_range(40, 60))
+	var gold_gain: int = int(mini(lv, 50) * randf_range(35, 55))
+	ctx["player_gold"] = ctx.get("player_gold", 0) + gold_gain
+	return { "event": "challenge", "data": { "message": "🏆 挑战胜利! +" + str(exp_gain) + "EXP +" + str(gold_gain) + "金", "exp_gain": exp_gain } }
 
 
 ## ============ 休息格 ============

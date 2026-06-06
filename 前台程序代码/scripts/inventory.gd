@@ -1,8 +1,8 @@
 class_name Inventory
 extends RefCounted
 ## ============================================================
-## Inventory - 背包系统 v0.1
-## 物品增删、堆叠、使用
+## Inventory - 背包系统 v0.2
+## 物品增删、堆叠、使用、扩容
 ## ============================================================
 
 const ItemDBRef = preload("res://scripts/item_db.gd")
@@ -11,7 +11,28 @@ signal item_changed
 
 # items: Array[{ item_id: int, count: int }]
 var items: Array[Dictionary] = []
-var capacity: int = 30
+var capacity: int = 100
+var expansion_count: int = 0  # 已扩容次数
+
+# 扩容成本表（索引=扩容次数）
+const EXPANSION_COST: Array[int] = [
+	5000,     # 第1次: 100→150
+	15000,    # 第2次: 150→200
+	30000,    # 第3次: 200→250
+	50000,    # 第4次: 250→300
+	75000,    # 第5次: 300→350
+	100000,   # 第6次: 350→400
+	150000,   # 第7次: 400→450
+	200000,   # 第8次: 450→500
+	300000,   # 第9次: 500→550
+	400000,   # 第10次: 550→600
+	500000,   # 第11次: 600→650
+	750000,   # 第12次: 650→700
+	1000000,  # 第13次: 700→750
+	1500000,  # 第14次: 750→800
+]
+const MAX_EXPANSIONS: int = 18
+const SLOTS_PER_EXPAND: int = 50
 
 
 ## 添加物品（自动堆叠）
@@ -69,12 +90,53 @@ func get_slot_count() -> int:
 	return items.size()
 
 
+## --- 扩容系统 ---
+
+## 判断是否已满（不能再扩容了）
+func is_expansion_maxed() -> bool:
+	return expansion_count >= MAX_EXPANSIONS
+
+
+## 获取下一次扩容需要的金币数，-1 表示已满
+func get_next_expansion_cost() -> int:
+	if is_expansion_maxed():
+		return -1
+	if expansion_count < EXPANSION_COST.size():
+		return EXPANSION_COST[expansion_count]
+	# 超出定义表的部分，自动递增长（2倍上次）
+	var last_cost: int = EXPANSION_COST[-1]
+	var extra: int = expansion_count - EXPANSION_COST.size() + 1
+	return last_cost * int(pow(1.3, extra))
+
+
+## 执行扩容（已验证金币足够后调用）
+func expand() -> void:
+	if is_expansion_maxed():
+		return
+	expansion_count += 1
+	capacity += SLOTS_PER_EXPAND
+	item_changed.emit()
+
+
 ## 序列化
-func to_dict() -> Array:
-	return items.duplicate(true)
+func to_dict() -> Dictionary:
+	return {
+		"items": items.duplicate(true),
+		"expansion_count": expansion_count,
+		"capacity": capacity,
+	}
 
 
-func from_dict(data: Array) -> void:
+func from_dict(data) -> void:
 	items.clear()
-	for d in data:
-		items.append(d.duplicate())
+	if data is Array:
+		# 旧格式兼容
+		for d in data:
+			items.append(d.duplicate())
+		expansion_count = 0
+		capacity = 100
+	elif data is Dictionary:
+		for d in data.get("items", []):
+			items.append(d.duplicate())
+		expansion_count = data.get("expansion_count", 0)
+		capacity = data.get("capacity", 100)

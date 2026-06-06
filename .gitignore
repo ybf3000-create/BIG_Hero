@@ -1,1 +1,4 @@
 debug.log
+.godot/
+*.uid
+*.import

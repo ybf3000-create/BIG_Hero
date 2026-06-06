@@ -41,6 +41,12 @@ var player_exp_max: int = 100
 var player_gold: int = 0
 var player_revive: int = 3
 var player_max_revive: int = 3
+# 自由属性点（每升1级+3点）
+var player_free_points: int = 0
+var player_stat_atk: int = 0
+var player_stat_def: int = 0
+var player_stat_spd: int = 0
+var player_stat_luk: int = 0
 var player_grid_index: int = 0
 var map_total_grids: int = 28
 var map_grids: Array[int] = []
@@ -605,6 +611,11 @@ func _load_from_save_data(data: Dictionary) -> void:
 	player_exp_max = data.get("exp_max", 100)
 	player_gold = data.get("gold", 0)
 	player_revive = data.get("revive_coins", 3)
+	player_free_points = data.get("free_points", 0)
+	player_stat_atk = data.get("stat_atk", 0)
+	player_stat_def = data.get("stat_def", 0)
+	player_stat_spd = data.get("stat_spd", 0)
+	player_stat_luk = data.get("stat_luk", 0)
 	player_grid_index = data.get("grid_index", 0)
 	map_total_grids = data.get("map_total_grids", 28)
 	map_grids.clear()
@@ -635,6 +646,11 @@ func _build_save_data() -> Dictionary:
 		"exp_max": player_exp_max,
 		"gold": player_gold,
 		"revive_coins": player_revive,
+		"free_points": player_free_points,
+		"stat_atk": player_stat_atk,
+		"stat_def": player_stat_def,
+		"stat_spd": player_stat_spd,
+		"stat_luk": player_stat_luk,
 		"grid_index": player_grid_index,
 		"map_total_grids": map_total_grids,
 		"map_grids": map_grids,
@@ -800,6 +816,11 @@ func _on_move_complete() -> void:
 
 	_check_poker_hand()
 	_check_lottery_draw()
+
+	# 应用格子经验收益
+	if edata.has("exp_gain"):
+		_add_exp(edata["exp_gain"])
+
 	_refresh_top_bar()
 	_auto_save()
 	if auto_play_enabled:
@@ -812,6 +833,65 @@ func _auto_save() -> void:
 	var sm = _sm()
 	if sm:
 		sm.save_game(_current_slot, _build_save_data())
+
+
+## ============================================================
+## 经验/升级系统
+## ============================================================
+## 增加经验，若经验满则自动升级
+func _add_exp(amount: int) -> void:
+	if amount <= 0:
+		return
+	player_exp += amount
+	while player_exp >= player_exp_max:
+		player_exp -= player_exp_max
+		player_level += 1
+		player_free_points += 3
+		player_exp_max = int(100.0 * pow(1.15, player_level - 1))
+		_show_float_text("🎉 升级! Lv." + str(player_level) + " 获得3点自由属性点", Color(0.3, 1.0, 0.6))
+	_refresh_top_bar()
+
+
+## 消耗自由属性点加点
+func _add_free_stat(stat_name: String) -> void:
+	if player_free_points <= 0:
+		_show_float_text("没有可用属性点", Color(0.6, 0.6, 0.7))
+		return
+	match stat_name:
+		"atk":
+			player_stat_atk += 1
+		"def":
+			player_stat_def += 1
+		"spd":
+			player_stat_spd += 1
+		"luk":
+			player_stat_luk += 1
+		_:
+			return
+	player_free_points -= 1
+	_refresh_all_stats_panels()
+
+
+## 洗点：重置自由属性点
+func _reset_stats() -> void:
+	var cost: int = player_level * 200
+	if player_gold < cost:
+		_show_float_text("金币不足！洗点需要 " + str(cost) + " 金", Color(1.0, 0.3, 0.3))
+		return
+	var total_used: int = player_stat_atk + player_stat_def + player_stat_spd + player_stat_luk
+	if total_used <= 0 and player_free_points > 0:
+		_show_float_text("没有已分配的属性点需要重置", Color(0.6, 0.6, 0.7))
+		return
+	if total_used <= 0:
+		return
+	player_gold -= cost
+	player_free_points += total_used
+	player_stat_atk = 0
+	player_stat_def = 0
+	player_stat_spd = 0
+	player_stat_luk = 0
+	_show_float_text("洗点成功！消耗 " + str(cost) + " 金币，归还 " + str(total_used) + " 自由属性点", Color(0.3, 1.0, 0.6))
+	_refresh_all_stats_panels()
 
 
 ## ============ 闪电跳跃 ============
@@ -1066,6 +1146,16 @@ func _suit_color(s: String) -> Color:
 
 
 func _refresh_top_bar() -> void:
+	var lv_lbl: Label = $TopBar/LevelLabel as Label
+	if lv_lbl:
+		lv_lbl.text = "Lv." + str(player_level)
+	var exp_bar: ProgressBar = $TopBar/ExpBar as ProgressBar
+	if exp_bar:
+		exp_bar.value = player_exp
+		exp_bar.max_value = player_exp_max
+	var exp_lbl: Label = $TopBar/ExpLabel as Label
+	if exp_lbl:
+		exp_lbl.text = str(player_exp) + "/" + str(player_exp_max)
 	var gold_lbl: Label = $TopBar/GoldLabel as Label
 	if gold_lbl:
 		gold_lbl.text = str(player_gold)
@@ -1396,6 +1486,83 @@ var _inv_tab: String = "equip"   # "consume" | "equip"
 var _inv_filter_quality: Array[int] = []   # 空=全部, 选中多个
 var _inv_filter_slot: Array[int] = []       # 空=全部, 选中多个
 
+## 洗点确认弹窗
+func _show_reset_confirm() -> void:
+	var old_conf: Node = get_node_or_null("ResetConfirmDialog")
+	if old_conf:
+		old_conf.queue_free()
+		return
+
+	var cost: int = player_level * 200
+	var total_used: int = player_stat_atk + player_stat_def + player_stat_spd + player_stat_luk
+	if total_used <= 0:
+		_show_float_text("没有已分配的属性点需要重置", Color(0.6, 0.6, 0.7))
+		return
+	if player_gold < cost:
+		_show_float_text("金币不足！洗点需要 " + str(cost) + " 金", Color(1.0, 0.3, 0.3))
+		return
+
+	# 遮罩
+	_ensure_overlay()
+	var ov: Button = get_node_or_null("TooltipOverlay") as Button
+	if ov:
+		ov.pressed.connect(func():
+			var d2 := get_node_or_null("ResetConfirmDialog")
+			if d2: d2.queue_free()
+		)
+
+	var dialog: Panel = Panel.new()
+	dialog.name = "ResetConfirmDialog"
+	dialog.position = Vector2(340, 280)
+	dialog.size = Vector2(360, 180)
+	_panel_style(dialog, Color(0.06, 0.07, 0.14, 0.95))
+
+	var title: Label = Label.new()
+	title.text = "🔄 洗点确认"
+	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
+	title.position = Vector2(20, 16)
+	dialog.add_child(title)
+
+	var body: Label = Label.new()
+	body.text = "重置全部 " + str(total_used) + " 点自由属性点\n消耗金币: " + str(cost) + " 金"
+	body.add_theme_font_size_override("font_size", 14)
+	body.add_theme_color_override("font_color", Color(0.8, 0.8, 0.85))
+	body.position = Vector2(20, 52)
+	dialog.add_child(body)
+
+	var confirm_btn: Button = Button.new()
+	confirm_btn.text = "确认洗点"
+	confirm_btn.position = Vector2(60, 120)
+	confirm_btn.size = Vector2(100, 36)
+	_btn_style_mini(confirm_btn, Color(0.3, 0.12, 0.12))
+	confirm_btn.add_theme_color_override("font_color", Color(1.0, 0.6, 0.6))
+	confirm_btn.pressed.connect(func():
+		_reset_stats()
+		var d3 := get_node_or_null("ResetConfirmDialog")
+		if d3: d3.queue_free()
+		_close_all_tooltips()
+	)
+	dialog.add_child(confirm_btn)
+
+	var cancel_btn: Button = Button.new()
+	cancel_btn.text = "取消"
+	cancel_btn.position = Vector2(200, 120)
+	cancel_btn.size = Vector2(80, 36)
+	_btn_style_mini(cancel_btn, Color(0.2, 0.2, 0.3))
+	cancel_btn.pressed.connect(func():
+		var d4 := get_node_or_null("ResetConfirmDialog")
+		if d4: d4.queue_free()
+		_close_all_tooltips()
+	)
+	dialog.add_child(cancel_btn)
+
+	add_child(dialog)
+
+
+## ============================================================
+## 第三部分续 — 背包面板
+## ============================================================
 func _show_inventory_panel() -> void:
 	# 移除旧面板（如有）
 	var old: Node = get_node_or_null("InventoryPanel")
@@ -1416,7 +1583,9 @@ func _build_inventory_panel() -> void:
 
 	# 标题
 	var title: Label = Label.new()
-	title.text = "🎒 背包  |  💰 " + str(player_gold) + " 金币"
+	title.text = "🎒 背包 (" + str(inventory.get_slot_count()) + "/" + str(inventory.capacity) + ")  |  💰 " + str(player_gold) + " 金币"
+	if inventory.is_expansion_maxed():
+		title.text = "🎒 背包 (" + str(inventory.get_slot_count()) + "/" + str(inventory.capacity) + "·满)  |  💰 " + str(player_gold) + " 金币"
 	title.add_theme_font_size_override("font_size", 22)
 	title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
 	title.position = Vector2(20, 10)
@@ -1766,11 +1935,99 @@ func _refresh_item_area(main_panel: Panel) -> void:
 		_build_equip_tab(content, main_panel)
 
 
+## 背包扩容确认弹窗
+func _show_expansion_confirm(main_panel: Panel) -> void:
+	var cost: int = inventory.get_next_expansion_cost()
+	if cost < 0:
+		_show_float_text("背包已达到最大容量", Color(0.6, 0.6, 0.7))
+		return
+	if player_gold < cost:
+		_show_float_text("金币不足！扩容需要 " + str(cost) + " 金", Color(1.0, 0.3, 0.3))
+		return
+
+	var old_conf: Node = get_node_or_null("ExpansionConfirm")
+	if old_conf:
+		old_conf.queue_free()
+		return
+
+	# 遮罩
+	_ensure_overlay()
+	var ov: Button = get_node_or_null("TooltipOverlay") as Button
+	if ov:
+		ov.pressed.connect(func():
+			var d2 := get_node_or_null("ExpansionConfirm")
+			if d2: d2.queue_free()
+		)
+
+	var dialog: Panel = Panel.new()
+	dialog.name = "ExpansionConfirm"
+	dialog.position = Vector2(340, 280)
+	dialog.size = Vector2(360, 180)
+	_panel_style(dialog, Color(0.06, 0.07, 0.14, 0.95))
+
+	var title: Label = Label.new()
+	title.text = "📦 背包扩容"
+	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
+	title.position = Vector2(20, 16)
+	dialog.add_child(title)
+
+	var body: Label = Label.new()
+	var new_cap: int = inventory.capacity + InventoryCls.SLOTS_PER_EXPAND
+	body.text = "扩容 +" + str(InventoryCls.SLOTS_PER_EXPAND) + " 格\n当前: " + str(inventory.capacity) + " → " + str(new_cap) + " 格\n消耗金币: " + str(cost)
+	body.add_theme_font_size_override("font_size", 14)
+	body.add_theme_color_override("font_color", Color(0.8, 0.8, 0.85))
+	body.position = Vector2(20, 52)
+	dialog.add_child(body)
+
+	var confirm_btn: Button = Button.new()
+	confirm_btn.text = "确认扩容"
+	confirm_btn.position = Vector2(60, 120)
+	confirm_btn.size = Vector2(100, 36)
+	_btn_style_mini(confirm_btn, Color(0.1, 0.3, 0.15))
+	confirm_btn.add_theme_color_override("font_color", Color(0.3, 1.0, 0.5))
+	confirm_btn.pressed.connect(func():
+		var cost2: int = inventory.get_next_expansion_cost()
+		if player_gold >= cost2:
+			player_gold -= cost2
+			inventory.expand()
+			_show_float_text("扩容成功！背包 " + str(inventory.capacity) + " 格", Color(0.3, 1.0, 0.6))
+		var d3 := get_node_or_null("ExpansionConfirm")
+		if d3: d3.queue_free()
+		_close_all_tooltips()
+		main_panel.queue_free()
+		_show_inventory_panel()
+		_refresh_top_bar()
+	)
+	dialog.add_child(confirm_btn)
+
+	var cancel_btn: Button = Button.new()
+	cancel_btn.text = "取消"
+	cancel_btn.position = Vector2(200, 120)
+	cancel_btn.size = Vector2(80, 36)
+	_btn_style_mini(cancel_btn, Color(0.2, 0.2, 0.3))
+	cancel_btn.pressed.connect(func():
+		var d4 := get_node_or_null("ExpansionConfirm")
+		if d4: d4.queue_free()
+		_close_all_tooltips()
+	)
+	dialog.add_child(cancel_btn)
+
+	add_child(dialog)
+
+
 func _build_consume_tab(area: Panel, main_panel: Panel) -> void:
 	var cnt: int = inventory.get_slot_count()
 	var cols: int = 8
 	var gap: float = 8.0
 	var icon_s: float = 48.0
+
+	# 构建格子底框样式
+	var cell_style := StyleBoxFlat.new()
+	cell_style.bg_color = Color(0.12, 0.13, 0.20)
+	cell_style.border_width_left = 1; cell_style.border_width_right = 1
+	cell_style.border_width_top = 1; cell_style.border_width_bottom = 1
+	cell_style.border_color = Color(0.25, 0.25, 0.35)
 
 	for i in range(cnt):
 		var slot: Dictionary = inventory.get_slot(i)
@@ -1783,10 +2040,11 @@ func _build_consume_tab(area: Panel, main_panel: Panel) -> void:
 		if y > 370:
 			break
 
-		var cell_bg: ColorRect = ColorRect.new()
+		# 格子底框（StyleBoxFlat 边框）
+		var cell_bg: Panel = Panel.new()
 		cell_bg.position = Vector2(x, y)
 		cell_bg.size = Vector2(icon_s, icon_s)
-		cell_bg.color = Color(0.12, 0.13, 0.20)
+		cell_bg.add_theme_stylebox_override("panel", cell_style)
 		area.add_child(cell_bg)
 
 		var icon: Label = Label.new()
@@ -1815,6 +2073,48 @@ func _build_consume_tab(area: Panel, main_panel: Panel) -> void:
 			_show_inventory_panel()
 		)
 		area.add_child(btn)
+
+	# --- 扩容按钮（最后一个格子后面显示+号）---
+	if not inventory.is_expansion_maxed():
+		var last_row: int = cnt / cols
+		var last_col: int = cnt % cols
+		var plus_x: float = gap + last_col * (icon_s + gap)
+		var plus_y: float = gap + last_row * (icon_s + gap + 14)
+
+		# 如果某行满了或还有空位，放在下一个位置
+		if plus_y > 370:
+			pass  # 超出可见区域就不显示
+		else:
+			var plus_cell_style := StyleBoxFlat.new()
+			plus_cell_style.bg_color = Color(0.10, 0.11, 0.18)
+			plus_cell_style.border_width_left = 1; plus_cell_style.border_width_right = 1
+			plus_cell_style.border_width_top = 1; plus_cell_style.border_width_bottom = 1
+			plus_cell_style.border_color = Color(0.35, 0.5, 0.35)
+
+			var plus_cell: Panel = Panel.new()
+			plus_cell.position = Vector2(plus_x, plus_y)
+			plus_cell.size = Vector2(icon_s, icon_s)
+			plus_cell.add_theme_stylebox_override("panel", plus_cell_style)
+			area.add_child(plus_cell)
+
+			var plus_lbl: Label = Label.new()
+			plus_lbl.text = "+"
+			plus_lbl.add_theme_font_size_override("font_size", 32)
+			plus_lbl.add_theme_color_override("font_color", Color(0.3, 0.8, 0.3))
+			plus_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			plus_lbl.position = Vector2(plus_x, plus_y + 4)
+			plus_lbl.size = Vector2(icon_s, icon_s)
+			area.add_child(plus_lbl)
+
+			var plus_btn: Button = Button.new()
+			plus_btn.flat = true
+			plus_btn.position = Vector2(plus_x, plus_y)
+			plus_btn.size = Vector2(icon_s, icon_s)
+			_btn_transparent2(plus_btn)
+			plus_btn.pressed.connect(func():
+				_show_expansion_confirm(main_panel)
+			)
+			area.add_child(plus_btn)
 
 
 func _build_equip_tab(area: Panel, main_panel: Panel) -> void:
@@ -1851,19 +2151,12 @@ func _build_equip_tab(area: Panel, main_panel: Panel) -> void:
 		qborder.position = Vector2(x - 1, y - 1)
 		qborder.size = Vector2(icon_s + 2, icon_s + 2)
 		var qb := StyleBoxFlat.new()
-		qb.bg_color = Color(1,1,1,0)
+		qb.bg_color = Color(0.10, 0.11, 0.18)
 		qb.border_width_left = 2; qb.border_width_right = 2
 		qb.border_width_top = 2; qb.border_width_bottom = 2
 		qb.border_color = qclr
 		qborder.add_theme_stylebox_override("panel", qb)
 		area.add_child(qborder)
-
-		# 背景
-		var cell_bg: ColorRect = ColorRect.new()
-		cell_bg.position = Vector2(x, y)
-		cell_bg.size = Vector2(icon_s, icon_s)
-		cell_bg.color = Color(0.10, 0.11, 0.18)
-		area.add_child(cell_bg)
 
 		# 图标
 		var icon: Label = Label.new()
@@ -2459,16 +2752,27 @@ func _calc_player_stats() -> Dictionary:
 	# 预留：神祇祝福加成
 	var deity: Dictionary = _calc_deity_bonus()
 
+	# 自由属性点加成
+	var free_atk_pct: float = player_stat_atk * 0.02     # 每点+2%最终伤害
+	var free_def_pct: float = player_stat_def * 0.015     # 每点+1.5%直接减伤
+	var free_spd_pct: float = player_stat_spd * 0.01      # 每点-1%出手CD（上限50%）
+	var free_luk_pct: float = player_stat_luk * 0.02      # 每点+2%稀有掉落
+
 	return {
 		"hp": hp_base + hp_equip, "hp_base": hp_base, "hp_equip": hp_equip,
-		"atk": atk_base + atk_equip, "atk_base": atk_base, "atk_equip": atk_equip,
-		"def": def_base + def_equip, "def_base": def_base, "def_equip": def_equip,
-		"spd": spd, "luk": luk,
+		"atk": atk_base + atk_equip, "atk_base": atk_base, "atk_equip": atk_equip, "free_atk_pct": free_atk_pct,
+		"def": def_base + def_equip, "def_base": def_base, "def_equip": def_equip, "free_def_pct": free_def_pct,
+		"spd": spd + player_stat_spd, "luk": luk + player_stat_luk,
+		"free_spd_pct": free_spd_pct, "free_luk_pct": free_luk_pct,
 		"crit": int(5 + crit), "critdmg": int(150 + critdmg),
 		"hit": int(100 + hit), "dodge": int(dodge), "block": int(block),
 		"skill_dmg": int(skill_dmg), "cd_reduce": int(cd_reduce),
 		"regen": regen, "lifesteal": lifesteal,
 		"gold_bonus": gold_bonus, "exp_bonus": exp_bonus,
+		"free_stat_atk": player_stat_atk,
+		"free_stat_def": player_stat_def,
+		"free_stat_spd": player_stat_spd,
+		"free_stat_luk": player_stat_luk,
 	}
 
 
@@ -2533,6 +2837,88 @@ func _show_stats_panel() -> void:
 	exp_lbl.position = Vector2(20, 60)
 	panel.add_child(exp_lbl)
 
+	# ============ 自由属性点区域 ============
+	var free_sec_y: float = 82.0
+
+	var free_bg: ColorRect = ColorRect.new()
+	free_bg.position = Vector2(16, free_sec_y)
+	free_bg.size = Vector2(568, 80)
+	free_bg.color = Color(0.12, 0.14, 0.22)
+	panel.add_child(free_bg)
+
+	var free_title: Label = Label.new()
+	free_title.text = "✨ 自由属性点: " + str(player_free_points)
+	free_title.add_theme_font_size_override("font_size", 14)
+	free_title.add_theme_color_override("font_color", Color(0.3, 1.0, 0.6) if player_free_points > 0 else Color(0.6, 0.6, 0.7))
+	free_title.position = Vector2(28, free_sec_y + 4)
+	panel.add_child(free_title)
+
+	# 洗点按钮
+	var reset_btn: Button = Button.new()
+	reset_btn.text = "洗点"
+	reset_btn.position = Vector2(480, free_sec_y + 2)
+	reset_btn.size = Vector2(60, 22)
+	_btn_style_mini(reset_btn, Color(0.3, 0.12, 0.12))
+	reset_btn.add_theme_color_override("font_color", Color(1.0, 0.6, 0.6))
+	reset_btn.pressed.connect(_show_reset_confirm)
+	panel.add_child(reset_btn)
+
+	# 4维自由属性
+	var free_stats: Array[Dictionary] = [
+		{ "name": "攻击", "key": "atk", "icon": "⚔", "value": player_stat_atk, "desc": "每点+2%最终伤害" },
+		{ "name": "防御", "key": "def", "icon": "🛡", "value": player_stat_def, "desc": "每点+1.5%直接减伤(上限50%)" },
+		{ "name": "速度", "key": "spd", "icon": "👟", "value": player_stat_spd, "desc": "每点-1%出手CD(上限50%)" },
+		{ "name": "幸运", "key": "luk", "icon": "🍀", "value": player_stat_luk, "desc": "每点+2%稀有掉落/好事件概率" },
+	]
+	for fi in range(free_stats.size()):
+		var fs: Dictionary = free_stats[fi]
+		var fx: float = 28.0 + fi * 138.0
+		var fy: float = free_sec_y + 28.0
+
+		# 标签: 图标 + 名称
+		var fl: Label = Label.new()
+		fl.text = fs["icon"] + " " + fs["name"]
+		fl.add_theme_font_size_override("font_size", 12)
+		fl.add_theme_color_override("font_color", Color(0.8, 0.85, 0.9))
+		fl.position = Vector2(fx, fy)
+		panel.add_child(fl)
+
+		# 数值
+		var fv: Label = Label.new()
+		fv.name = "FreeStatVal_" + fs["key"]
+		fv.text = str(fs["value"])
+		fv.add_theme_font_size_override("font_size", 16)
+		fv.add_theme_color_override("font_color", Color(1.0, 0.9, 0.3))
+		fv.position = Vector2(fx, fy + 18)
+		panel.add_child(fv)
+
+		# + 按钮（有点数才显示）
+		if player_free_points > 0:
+			var plus_btn: Button = Button.new()
+			plus_btn.text = "+"
+			plus_btn.position = Vector2(fx + 50, fy + 14)
+			plus_btn.size = Vector2(28, 24)
+			plus_btn.add_theme_font_size_override("font_size", 16)
+			var sk: String = fs["key"]
+			plus_btn.pressed.connect(func(): _add_free_stat(sk))
+			var pb_style := StyleBoxFlat.new()
+			pb_style.bg_color = Color(0.15, 0.35, 0.15)
+			pb_style.border_width_left = 1; pb_style.border_width_right = 1
+			pb_style.border_width_top = 1; pb_style.border_width_bottom = 1
+			pb_style.border_color = Color(0.3, 0.8, 0.3)
+			plus_btn.add_theme_stylebox_override("normal", pb_style)
+			plus_btn.add_theme_color_override("font_color", Color(0.3, 1.0, 0.3))
+			panel.add_child(plus_btn)
+
+	# 分隔线
+	var sep_line: ColorRect = ColorRect.new()
+	sep_line.position = Vector2(16, free_sec_y + 82)
+	sep_line.size = Vector2(568, 1)
+	sep_line.color = Color(0.2, 0.2, 0.3)
+	panel.add_child(sep_line)
+
+	# ============ 属性列表分隔结束 ============
+
 	# 属性列表（使用真实计算的数值）—— 18词条全属性
 	var ps: Dictionary = _calc_player_stats()
 	var stats: Array[Dictionary] = [
@@ -2554,7 +2940,7 @@ func _show_stats_panel() -> void:
 		{ "icon": "📖", "name": "经验加成",       "value": "+" + str(ps["exp_bonus"]) + "%", "raw": 0, "eqp": ps["exp_bonus"], "desc": "战斗获得经验的额外加成。\n天命卡/装备词条可提高" },
 	]
 
-	var sy: float = 88.0
+	var sy: float = free_sec_y + 92.0
 	var left_x: float = 16.0
 	var right_x: float = 310.0
 	var row_w: float = 278.0

@@ -20,13 +20,13 @@ config/icon="res://icon.svg"
 SaveManager="*res://scripts/save_manager.gd"
 DebugCommander="*res://scripts/debug_commander.gd"
 
-[rendering]
-
-renderer/rendering_method="mobile"
-
 [display]
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
+
+[rendering]
+
+renderer/rendering_method="mobile"

@@ -65,6 +65,11 @@ func create_character(slot: int, char_name: String) -> Dictionary:
 		"map_grids": _default_map_grids(),
 		"dice_history": [],
 		"poker_records": [],
+		"free_points": 0,
+		"stat_atk": 0,
+		"stat_def": 0,
+		"stat_spd": 0,
+		"stat_luk": 0,
 	}
 	_write_json(_slot_path(slot), data)
 	slot_changed.emit(slot)
