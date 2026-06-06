@@ -1329,7 +1329,8 @@ func _show_float_text(text: String, clr: Color = Color.WHITE) -> void:
 	tw.tween_callback(func():
 		if _float_text_node == lbl:
 			_float_text_node = null
-		lbl.queue_free()
+		if is_instance_valid(lbl):
+			lbl.queue_free()
 	)
 
 
