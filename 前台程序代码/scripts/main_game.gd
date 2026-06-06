@@ -1346,6 +1346,13 @@ func _close_all_tooltips() -> void:
 	var ov: Node = get_node_or_null("TooltipOverlay")
 	if ov:
 		ov.queue_free()
+	# 也清理确认对话框（可能因遮罩点击而触发）
+	var d1: Node = get_node_or_null("ExpansionConfirm")
+	if d1:
+		d1.queue_free()
+	var d2: Node = get_node_or_null("ResetConfirmDialog")
+	if d2:
+		d2.queue_free()
 
 func _on_test_generate_equip() -> void:
 	var slots: Array[String] = ["weapon","armor","shoes","ring","necklace","cape","helmet","charm"]
@@ -1488,9 +1495,7 @@ var _inv_filter_slot: Array[int] = []       # 空=全部, 选中多个
 
 ## 洗点确认弹窗
 func _show_reset_confirm() -> void:
-	var old_conf: Node = get_node_or_null("ResetConfirmDialog")
-	if old_conf:
-		old_conf.queue_free()
+	if get_node_or_null("ResetConfirmDialog"):
 		return
 
 	var cost: int = player_level * 200
@@ -1502,14 +1507,8 @@ func _show_reset_confirm() -> void:
 		_show_float_text("金币不足！洗点需要 " + str(cost) + " 金", Color(1.0, 0.3, 0.3))
 		return
 
-	# 遮罩
+	# 遮罩（由 _close_all_tooltips 统一清理）
 	_ensure_overlay()
-	var ov: Button = get_node_or_null("TooltipOverlay") as Button
-	if ov:
-		ov.pressed.connect(func():
-			var d2 := get_node_or_null("ResetConfirmDialog")
-			if d2: d2.queue_free()
-		)
 
 	var dialog: Panel = Panel.new()
 	dialog.name = "ResetConfirmDialog"
@@ -1566,8 +1565,7 @@ func _show_reset_confirm() -> void:
 func _show_inventory_panel() -> void:
 	# 移除旧面板（如有）
 	var old: Node = get_node_or_null("InventoryPanel")
-	if old:
-		old.get_parent().remove_child(old)
+	if old and is_instance_valid(old):
 		old.queue_free()
 	_auto_save()
 	_build_inventory_panel()
@@ -1945,19 +1943,12 @@ func _show_expansion_confirm(main_panel: Panel) -> void:
 		_show_float_text("金币不足！扩容需要 " + str(cost) + " 金", Color(1.0, 0.3, 0.3))
 		return
 
-	var old_conf: Node = get_node_or_null("ExpansionConfirm")
-	if old_conf:
-		old_conf.queue_free()
+	# 避免重复弹窗
+	if get_node_or_null("ExpansionConfirm"):
 		return
 
-	# 遮罩
+	# 遮罩（已有 overlay 不重复创建，由 _close_all_tooltips 统一清理）
 	_ensure_overlay()
-	var ov: Button = get_node_or_null("TooltipOverlay") as Button
-	if ov:
-		ov.pressed.connect(func():
-			var d2 := get_node_or_null("ExpansionConfirm")
-			if d2: d2.queue_free()
-		)
 
 	var dialog: Panel = Panel.new()
 	dialog.name = "ExpansionConfirm"
@@ -1992,10 +1983,13 @@ func _show_expansion_confirm(main_panel: Panel) -> void:
 			player_gold -= cost2
 			inventory.expand()
 			_show_float_text("扩容成功！背包 " + str(inventory.capacity) + " 格", Color(0.3, 1.0, 0.6))
+		# 关闭弹窗 → 触发 _close_all_tooltips 清理遮罩和对话框
 		var d3 := get_node_or_null("ExpansionConfirm")
 		if d3: d3.queue_free()
 		_close_all_tooltips()
-		main_panel.queue_free()
+		# 重建背包面板（安全：先标记再重建）
+		if is_instance_valid(main_panel):
+			main_panel.queue_free()
 		_show_inventory_panel()
 		_refresh_top_bar()
 	)
