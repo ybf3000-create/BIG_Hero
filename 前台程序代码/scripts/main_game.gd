@@ -2046,83 +2046,47 @@ func _build_consume_tab(area: Panel, main_panel: Panel) -> void:
 		var x: float = gap + col * (icon_s + gap)
 		var y: float = gap + row * (icon_s + gap + 14)
 
-		# 如果背包未满，用最后一个格子显示 + 号
-		var is_plus_slot: bool = (i == total_cells - 1) and not inventory.is_expansion_maxed()
+		# 格子底框
+		var cell_bg: Panel = Panel.new()
+		cell_bg.position = Vector2(x, y)
+		cell_bg.size = Vector2(icon_s, icon_s)
+		area.add_child(cell_bg)
 
-		if is_plus_slot:
-			# --- 扩容 + 号按钮 ---
-			var plus_cell_style := StyleBoxFlat.new()
-			plus_cell_style.bg_color = Color(0.10, 0.11, 0.18)
-			plus_cell_style.border_width_left = 1; plus_cell_style.border_width_right = 1
-			plus_cell_style.border_width_top = 1; plus_cell_style.border_width_bottom = 1
-			plus_cell_style.border_color = Color(0.35, 0.5, 0.35)
-
-			var plus_cell: Panel = Panel.new()
-			plus_cell.position = Vector2(x, y)
-			plus_cell.size = Vector2(icon_s, icon_s)
-			plus_cell.add_theme_stylebox_override("panel", plus_cell_style)
-			area.add_child(plus_cell)
-
-			var plus_lbl: Label = Label.new()
-			plus_lbl.text = "+"
-			plus_lbl.add_theme_font_size_override("font_size", 32)
-			plus_lbl.add_theme_color_override("font_color", Color(0.3, 0.8, 0.3))
-			plus_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			plus_lbl.position = Vector2(x, y + 4)
-			plus_lbl.size = Vector2(icon_s, icon_s)
-			area.add_child(plus_lbl)
-
-			var plus_btn: Button = Button.new()
-			plus_btn.flat = true
-			plus_btn.position = Vector2(x, y)
-			plus_btn.size = Vector2(icon_s, icon_s)
-			_btn_transparent2(plus_btn)
-			plus_btn.pressed.connect(func():
-				_show_expansion_confirm(main_panel)
-			)
-			area.add_child(plus_btn)
+		var slot: Dictionary = inventory.get_slot(i)
+		if slot.is_empty():
+			# 空格子
+			cell_bg.add_theme_stylebox_override("panel", empty_style)
 		else:
-			# 格子底框
-			var cell_bg: Panel = Panel.new()
-			cell_bg.position = Vector2(x, y)
-			cell_bg.size = Vector2(icon_s, icon_s)
-			area.add_child(cell_bg)
+			# 有物品
+			cell_bg.add_theme_stylebox_override("panel", cell_style)
+			var defn: Dictionary = ItemDBRef.get_item(slot["item_id"])
 
-			var slot: Dictionary = inventory.get_slot(i)
-			if slot.is_empty():
-				# 空格子
-				cell_bg.add_theme_stylebox_override("panel", empty_style)
-			else:
-				# 有物品
-				cell_bg.add_theme_stylebox_override("panel", cell_style)
-				var defn: Dictionary = ItemDBRef.get_item(slot["item_id"])
+			var icon: Label = Label.new()
+			icon.text = defn.get("icon", "?")
+			icon.add_theme_font_size_override("font_size", 24)
+			icon.position = Vector2(x + 4, y + 4)
+			area.add_child(icon)
 
-				var icon: Label = Label.new()
-				icon.text = defn.get("icon", "?")
-				icon.add_theme_font_size_override("font_size", 24)
-				icon.position = Vector2(x + 4, y + 4)
-				area.add_child(icon)
+			var cnt_lbl: Label = Label.new()
+			cnt_lbl.text = "×" + str(slot["count"])
+			cnt_lbl.add_theme_font_size_override("font_size", 9)
+			cnt_lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+			cnt_lbl.position = Vector2(x + 2, y + icon_s - 12)
+			area.add_child(cnt_lbl)
 
-				var cnt_lbl: Label = Label.new()
-				cnt_lbl.text = "×" + str(slot["count"])
-				cnt_lbl.add_theme_font_size_override("font_size", 9)
-				cnt_lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
-				cnt_lbl.position = Vector2(x + 2, y + icon_s - 12)
-				area.add_child(cnt_lbl)
-
-				# 点击使用
-				var btn: Button = Button.new()
-				btn.flat = true
-				btn.position = Vector2(x, y)
-				btn.size = Vector2(icon_s, icon_s)
-				_btn_transparent2(btn)
-				var si: int = i
-				btn.pressed.connect(func():
-					_on_item_action(si)
-					main_panel.queue_free()
-					_show_inventory_panel()
-				)
-				area.add_child(btn)
+			# 点击使用
+			var btn: Button = Button.new()
+			btn.flat = true
+			btn.position = Vector2(x, y)
+			btn.size = Vector2(icon_s, icon_s)
+			_btn_transparent2(btn)
+			var si: int = i
+			btn.pressed.connect(func():
+				_on_item_action(si)
+				main_panel.queue_free()
+				_show_inventory_panel()
+			)
+			area.add_child(btn)
 
 
 func _build_equip_tab(area: Panel, main_panel: Panel) -> void:
@@ -2222,6 +2186,38 @@ func _build_equip_tab(area: Panel, main_panel: Panel) -> void:
 							_show_equip_tooltip(eqp, eidx, "", main_panel)
 			)
 			area.add_child(btn)
+		elif i == total_cells - 1 and not inventory.is_expansion_maxed():
+			# --- 扩容 + 号按钮（装备页签底部） ---
+			var plus_cell_style := StyleBoxFlat.new()
+			plus_cell_style.bg_color = Color(0.10, 0.11, 0.18)
+			plus_cell_style.border_width_left = 1; plus_cell_style.border_width_right = 1
+			plus_cell_style.border_width_top = 1; plus_cell_style.border_width_bottom = 1
+			plus_cell_style.border_color = Color(0.35, 0.5, 0.35)
+
+			var plus_cell: Panel = Panel.new()
+			plus_cell.position = Vector2(x, y)
+			plus_cell.size = Vector2(icon_s, icon_s)
+			plus_cell.add_theme_stylebox_override("panel", plus_cell_style)
+			area.add_child(plus_cell)
+
+			var plus_lbl: Label = Label.new()
+			plus_lbl.text = "+"
+			plus_lbl.add_theme_font_size_override("font_size", 32)
+			plus_lbl.add_theme_color_override("font_color", Color(0.3, 0.8, 0.3))
+			plus_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			plus_lbl.position = Vector2(x, y + 4)
+			plus_lbl.size = Vector2(icon_s, icon_s)
+			area.add_child(plus_lbl)
+
+			var plus_btn: Button = Button.new()
+			plus_btn.flat = true
+			plus_btn.position = Vector2(x, y)
+			plus_btn.size = Vector2(icon_s, icon_s)
+			_btn_transparent2(plus_btn)
+			plus_btn.pressed.connect(func():
+				_show_expansion_confirm(main_panel)
+			)
+			area.add_child(plus_btn)
 		else:
 			# 空格子
 			var empty_frame: Panel = Panel.new()
