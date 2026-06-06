@@ -2700,7 +2700,6 @@ func _calc_player_stats() -> Dictionary:
 	var block: float = 0
 	var skill_dmg: float = 0
 	var cd_reduce: float = 0
-	var regen: float = 0.0
 	var lifesteal: float = 0.0
 	var gold_bonus: float = 0.0
 	var exp_bonus: float = 0.0
@@ -2742,7 +2741,6 @@ func _calc_player_stats() -> Dictionary:
 				"格挡率":     block += av
 				"技能伤害":   skill_dmg += av
 				"冷却缩减":   cd_reduce += av
-				"回血":       regen += av
 				"吸血":       lifesteal += av
 				"金币加成":   gold_bonus += av
 				"经验加成":   exp_bonus += av
@@ -2767,7 +2765,7 @@ func _calc_player_stats() -> Dictionary:
 		"crit": int(crit), "critdmg": int(150 + critdmg),
 		"hit": int(hit), "dodge": int(dodge), "block": int(block),
 		"skill_dmg": int(skill_dmg), "cd_reduce": int(cd_reduce),
-		"regen": regen, "lifesteal": lifesteal,
+		"lifesteal": lifesteal,
 		"gold_bonus": gold_bonus, "exp_bonus": exp_bonus,
 		"free_stat_atk": player_stat_atk,
 		"free_stat_def": player_stat_def,
@@ -2934,7 +2932,6 @@ func _show_stats_panel() -> void:
 		{ "icon": "🛡️", "name": "格挡率",        "value": str(ps["block"]) + "%", "raw": 0, "eqp": ps["block"], "desc": "格挡后伤害减半。\n暴击+格挡同时触发=暴击×0.5" },
 		{ "icon": "💥", "name": "技能伤害",       "value": "+" + str(ps["skill_dmg"]) + "%", "raw": 0, "eqp": ps["skill_dmg"], "desc": "技能造成的额外伤害加成。\n装备词条/宝石可提高" },
 		{ "icon": "⏳", "name": "冷却缩减",       "value": "-" + str(ps["cd_reduce"]) + "%", "raw": 0, "eqp": ps["cd_reduce"], "desc": "减少技能冷却时间。\n装备词条/宝石可提高" },
-		{ "icon": "💚", "name": "每步回血",       "value": "+" + str(ps["regen"]), "raw": 0, "eqp": ps["regen"], "desc": "每走一步恢复的生命值。\n装备词条可提高" },
 		{ "icon": "🩸", "name": "吸血%",         "value": "+" + str(ps["lifesteal"]) + "%", "raw": 0, "eqp": ps["lifesteal"], "desc": "攻击时吸取伤害百分比的生命。\n装备词条可提高" },
 		{ "icon": "💰", "name": "金币加成",       "value": "+" + str(ps["gold_bonus"]) + "%", "raw": 0, "eqp": ps["gold_bonus"], "desc": "战斗/宝箱获得金币的额外加成。\n天命卡/装备词条可提高" },
 		{ "icon": "📖", "name": "经验加成",       "value": "+" + str(ps["exp_bonus"]) + "%", "raw": 0, "eqp": ps["exp_bonus"], "desc": "战斗获得经验的额外加成。\n天命卡/装备词条可提高" },
