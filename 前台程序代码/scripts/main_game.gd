@@ -2017,10 +2017,15 @@ func _show_expansion_confirm(main_panel: Panel) -> void:
 
 
 func _build_consume_tab(area: Panel, main_panel: Panel) -> void:
-	var cnt: int = inventory.get_slot_count()
 	var cols: int = 8
 	var gap: float = 8.0
 	var icon_s: float = 48.0
+	var row_h: float = icon_s + gap + 14  # 每行高度（含底部标签空间）
+
+	# 计算可见范围内最多能放多少格
+	var max_y: float = 370.0
+	var max_visible_rows: int = int(max_y / row_h)
+	var total_cells: int = mini(inventory.capacity, max_visible_rows * cols)
 
 	# 构建格子底框样式
 	var cell_style := StyleBoxFlat.new()
@@ -2029,62 +2034,71 @@ func _build_consume_tab(area: Panel, main_panel: Panel) -> void:
 	cell_style.border_width_top = 1; cell_style.border_width_bottom = 1
 	cell_style.border_color = Color(0.25, 0.25, 0.35)
 
-	for i in range(cnt):
-		var slot: Dictionary = inventory.get_slot(i)
-		var defn: Dictionary = ItemDBRef.get_item(slot["item_id"])
+	var empty_style := StyleBoxFlat.new()
+	empty_style.bg_color = Color(0.08, 0.09, 0.14)
+	empty_style.border_width_left = 1; empty_style.border_width_right = 1
+	empty_style.border_width_top = 1; empty_style.border_width_bottom = 1
+	empty_style.border_color = Color(0.18, 0.18, 0.25)
+
+	for i in range(total_cells):
 		var col: int = i % cols
 		var row: int = i / cols
 		var x: float = gap + col * (icon_s + gap)
 		var y: float = gap + row * (icon_s + gap + 14)
 
-		if y > 370:
-			break
-
-		# 格子底框（StyleBoxFlat 边框）
+		# 格子底框
 		var cell_bg: Panel = Panel.new()
 		cell_bg.position = Vector2(x, y)
 		cell_bg.size = Vector2(icon_s, icon_s)
-		cell_bg.add_theme_stylebox_override("panel", cell_style)
 		area.add_child(cell_bg)
 
-		var icon: Label = Label.new()
-		icon.text = defn.get("icon", "?")
-		icon.add_theme_font_size_override("font_size", 24)
-		icon.position = Vector2(x + 4, y + 4)
-		area.add_child(icon)
-
-		var cnt_lbl: Label = Label.new()
-		cnt_lbl.text = "×" + str(slot["count"])
-		cnt_lbl.add_theme_font_size_override("font_size", 9)
-		cnt_lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
-		cnt_lbl.position = Vector2(x + 2, y + icon_s - 12)
-		area.add_child(cnt_lbl)
-
-		# 点击使用
-		var btn: Button = Button.new()
-		btn.flat = true
-		btn.position = Vector2(x, y)
-		btn.size = Vector2(icon_s, icon_s)
-		_btn_transparent2(btn)
-		var si: int = i
-		btn.pressed.connect(func():
-			_on_item_action(si)
-			main_panel.queue_free()
-			_show_inventory_panel()
-		)
-		area.add_child(btn)
-
-	# --- 扩容按钮（最后一个格子后面显示+号）---
-	if not inventory.is_expansion_maxed():
-		var last_row: int = cnt / cols
-		var last_col: int = cnt % cols
-		var plus_x: float = gap + last_col * (icon_s + gap)
-		var plus_y: float = gap + last_row * (icon_s + gap + 14)
-
-		# 如果某行满了或还有空位，放在下一个位置
-		if plus_y > 370:
-			pass  # 超出可见区域就不显示
+		var slot: Dictionary = inventory.get_slot(i)
+		if slot.is_empty():
+			# 空格子：灰色底框
+			cell_bg.add_theme_stylebox_override("panel", empty_style)
 		else:
+			# 有物品
+			cell_bg.add_theme_stylebox_override("panel", cell_style)
+			var defn: Dictionary = ItemDBRef.get_item(slot["item_id"])
+
+			var icon: Label = Label.new()
+			icon.text = defn.get("icon", "?")
+			icon.add_theme_font_size_override("font_size", 24)
+			icon.position = Vector2(x + 4, y + 4)
+			area.add_child(icon)
+
+			var cnt_lbl: Label = Label.new()
+			cnt_lbl.text = "×" + str(slot["count"])
+			cnt_lbl.add_theme_font_size_override("font_size", 9)
+			cnt_lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+			cnt_lbl.position = Vector2(x + 2, y + icon_s - 12)
+			area.add_child(cnt_lbl)
+
+			# 点击使用
+			var btn: Button = Button.new()
+			btn.flat = true
+			btn.position = Vector2(x, y)
+			btn.size = Vector2(icon_s, icon_s)
+			_btn_transparent2(btn)
+			var si: int = i
+			btn.pressed.connect(func():
+				_on_item_action(si)
+				main_panel.queue_free()
+				_show_inventory_panel()
+			)
+			area.add_child(btn)
+
+	# --- 如果没占满且可扩容，在最后一个格子的位置显示 + 号 ---
+	if not inventory.is_expansion_maxed() and total_cells < inventory.capacity:
+		var last_idx: int = total_cells
+		if last_idx > 0:
+			last_idx -= 1
+		var col2: int = last_idx % cols
+		var row2: int = last_idx / cols
+		var px: float = gap + col2 * (icon_s + gap)
+		var py: float = gap + row2 * (icon_s + gap + 14)
+
+		if py <= max_y:
 			var plus_cell_style := StyleBoxFlat.new()
 			plus_cell_style.bg_color = Color(0.10, 0.11, 0.18)
 			plus_cell_style.border_width_left = 1; plus_cell_style.border_width_right = 1
@@ -2092,7 +2106,7 @@ func _build_consume_tab(area: Panel, main_panel: Panel) -> void:
 			plus_cell_style.border_color = Color(0.35, 0.5, 0.35)
 
 			var plus_cell: Panel = Panel.new()
-			plus_cell.position = Vector2(plus_x, plus_y)
+			plus_cell.position = Vector2(px, py)
 			plus_cell.size = Vector2(icon_s, icon_s)
 			plus_cell.add_theme_stylebox_override("panel", plus_cell_style)
 			area.add_child(plus_cell)
@@ -2102,13 +2116,13 @@ func _build_consume_tab(area: Panel, main_panel: Panel) -> void:
 			plus_lbl.add_theme_font_size_override("font_size", 32)
 			plus_lbl.add_theme_color_override("font_color", Color(0.3, 0.8, 0.3))
 			plus_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			plus_lbl.position = Vector2(plus_x, plus_y + 4)
+			plus_lbl.position = Vector2(px, py + 4)
 			plus_lbl.size = Vector2(icon_s, icon_s)
 			area.add_child(plus_lbl)
 
 			var plus_btn: Button = Button.new()
 			plus_btn.flat = true
-			plus_btn.position = Vector2(plus_x, plus_y)
+			plus_btn.position = Vector2(px, py)
 			plus_btn.size = Vector2(icon_s, icon_s)
 			_btn_transparent2(plus_btn)
 			plus_btn.pressed.connect(func():
@@ -2121,6 +2135,17 @@ func _build_equip_tab(area: Panel, main_panel: Panel) -> void:
 	var cols: int = 8
 	var gap: float = 8.0
 	var icon_s: float = 48.0
+	var row_h: float = icon_s + gap + 22
+	var max_y: float = 360.0
+	var max_visible_rows: int = int(max_y / row_h)
+	var total_cells: int = max_visible_rows * cols
+
+	# 空格子样式
+	var empty_style := StyleBoxFlat.new()
+	empty_style.bg_color = Color(0.08, 0.09, 0.14)
+	empty_style.border_width_left = 1; empty_style.border_width_right = 1
+	empty_style.border_width_top = 1; empty_style.border_width_bottom = 1
+	empty_style.border_color = Color(0.18, 0.18, 0.25)
 
 	var filtered: Array[int] = []
 	for j in range(equip_instances.size()):
@@ -2133,74 +2158,83 @@ func _build_equip_tab(area: Panel, main_panel: Panel) -> void:
 			continue
 		filtered.append(j)
 
-	var cnt: int = filtered.size()
-	for i in range(cnt):
-		var ei: int = filtered[i]
-		var eqp: Dictionary = equip_instances[ei]
+	for i in range(total_cells):
 		var col: int = i % cols
 		var row: int = i / cols
 		var x: float = gap + col * (icon_s + gap)
 		var y: float = gap + row * (icon_s + gap + 22)
 
-		if y > 360:
+		if y > max_y:
 			break
 
-		# 品质边框
-		var qclr: Color = _qcolor(eqp.get("quality", 0))
-		var qborder: Panel = Panel.new()
-		qborder.position = Vector2(x - 1, y - 1)
-		qborder.size = Vector2(icon_s + 2, icon_s + 2)
-		var qb := StyleBoxFlat.new()
-		qb.bg_color = Color(0.10, 0.11, 0.18)
-		qb.border_width_left = 2; qb.border_width_right = 2
-		qb.border_width_top = 2; qb.border_width_bottom = 2
-		qb.border_color = qclr
-		qborder.add_theme_stylebox_override("panel", qb)
-		area.add_child(qborder)
+		if i < filtered.size():
+			# 有装备
+			var ei: int = filtered[i]
+			var eqp: Dictionary = equip_instances[ei]
 
-		# 图标
-		var icon: Label = Label.new()
-		icon.text = eqp.get("icon", "?")
-		icon.add_theme_font_size_override("font_size", 22)
-		icon.position = Vector2(x + 2, y)
-		area.add_child(icon)
+			# 品质边框
+			var qclr: Color = _qcolor(eqp.get("quality", 0))
+			var qborder: Panel = Panel.new()
+			qborder.position = Vector2(x - 1, y - 1)
+			qborder.size = Vector2(icon_s + 2, icon_s + 2)
+			var qb := StyleBoxFlat.new()
+			qb.bg_color = Color(0.10, 0.11, 0.18)
+			qb.border_width_left = 2; qb.border_width_right = 2
+			qb.border_width_top = 2; qb.border_width_bottom = 2
+			qb.border_color = qclr
+			qborder.add_theme_stylebox_override("panel", qb)
+			area.add_child(qborder)
 
-		# 名称（品质色）
-		var ename: Label = Label.new()
-		var short_name: String = eqp.get("base_name", "???")
-		if eqp.get("enhance", 0) > 0:
-			ename.text = short_name.substr(0, 3) + "+" + str(eqp["enhance"])
-		else:
-			ename.text = short_name.substr(0, 4)
-		ename.add_theme_font_size_override("font_size", 9)
-		ename.add_theme_color_override("font_color", qclr)
-		ename.position = Vector2(x, y + icon_s + 2)
-		ename.size = Vector2(icon_s, 12)
-		ename.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		area.add_child(ename)
+			# 图标
+			var icon: Label = Label.new()
+			icon.text = eqp.get("icon", "?")
+			icon.add_theme_font_size_override("font_size", 22)
+			icon.position = Vector2(x + 2, y)
+			area.add_child(icon)
 
-		# 点击 → tooltip, 右键快速装备
-		var btn: Button = Button.new()
-		btn.flat = true
-		btn.position = Vector2(x, y)
-		btn.size = Vector2(icon_s, icon_s + 16)
-		_btn_transparent2(btn)
-		var eidx: int = ei
-		btn.gui_input.connect(func(ev: InputEvent):
-			if ev is InputEventMouseButton and ev.pressed:
-				if ev.button_index == MOUSE_BUTTON_RIGHT:
-					_on_equip_instance(eidx)
-					_show_inventory_panel()
-				else:
-					_close_all_tooltips()
-					var s: String = eqp.get("slot", "")
-					var weq: Dictionary = equipment.get_slot_item(s)
-					if not weq.is_empty():
-						_show_compare_tooltips(eqp, weq, s, main_panel)
+			# 名称（品质色）
+			var ename: Label = Label.new()
+			var short_name: String = eqp.get("base_name", "???")
+			if eqp.get("enhance", 0) > 0:
+				ename.text = short_name.substr(0, 3) + "+" + str(eqp["enhance"])
+			else:
+				ename.text = short_name.substr(0, 4)
+			ename.add_theme_font_size_override("font_size", 9)
+			ename.add_theme_color_override("font_color", qclr)
+			ename.position = Vector2(x, y + icon_s + 2)
+			ename.size = Vector2(icon_s, 12)
+			ename.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			area.add_child(ename)
+
+			# 点击 → tooltip, 右键快速装备
+			var btn: Button = Button.new()
+			btn.flat = true
+			btn.position = Vector2(x, y)
+			btn.size = Vector2(icon_s, icon_s + 16)
+			_btn_transparent2(btn)
+			var eidx: int = ei
+			btn.gui_input.connect(func(ev: InputEvent):
+				if ev is InputEventMouseButton and ev.pressed:
+					if ev.button_index == MOUSE_BUTTON_RIGHT:
+						_on_equip_instance(eidx)
+						_show_inventory_panel()
 					else:
-						_show_equip_tooltip(eqp, eidx, "", main_panel)
-		)
-		area.add_child(btn)
+						_close_all_tooltips()
+						var s: String = eqp.get("slot", "")
+						var weq: Dictionary = equipment.get_slot_item(s)
+						if not weq.is_empty():
+							_show_compare_tooltips(eqp, weq, s, main_panel)
+						else:
+							_show_equip_tooltip(eqp, eidx, "", main_panel)
+			)
+			area.add_child(btn)
+		else:
+			# 空格子
+			var empty_frame: Panel = Panel.new()
+			empty_frame.position = Vector2(x, y)
+			empty_frame.size = Vector2(icon_s, icon_s)
+			empty_frame.add_theme_stylebox_override("panel", empty_style)
+			area.add_child(empty_frame)
 
 
 ## 装备完整 tooltip
