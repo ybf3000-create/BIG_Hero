@@ -1939,9 +1939,6 @@ func _show_expansion_confirm(main_panel: Panel) -> void:
 	if cost < 0:
 		_show_float_text("背包已达到最大容量", Color(0.6, 0.6, 0.7))
 		return
-	if player_gold < cost:
-		_show_float_text("金币不足！扩容需要 " + str(cost) + " 金", Color(1.0, 0.3, 0.3))
-		return
 
 	# 避免重复弹窗
 	if get_node_or_null("ExpansionConfirm"):
@@ -1978,16 +1975,20 @@ func _show_expansion_confirm(main_panel: Panel) -> void:
 	_btn_style_mini(confirm_btn, Color(0.1, 0.3, 0.15))
 	confirm_btn.add_theme_color_override("font_color", Color(0.3, 1.0, 0.5))
 	confirm_btn.pressed.connect(func():
+		# 点击确认时才检查金币
 		var cost2: int = inventory.get_next_expansion_cost()
-		if player_gold >= cost2:
+		if cost2 < 0:
+			_show_float_text("背包已达到最大容量", Color(0.6, 0.6, 0.7))
+		elif player_gold < cost2:
+			_show_float_text("金币不足！扩容需要 " + str(cost2) + " 金", Color(1.0, 0.3, 0.3))
+		else:
 			player_gold -= cost2
 			inventory.expand()
 			_show_float_text("扩容成功！背包 " + str(inventory.capacity) + " 格", Color(0.3, 1.0, 0.6))
-		# 关闭弹窗 → 触发 _close_all_tooltips 清理遮罩和对话框
+		# 关闭弹窗
 		var d3 := get_node_or_null("ExpansionConfirm")
 		if d3: d3.queue_free()
 		_close_all_tooltips()
-		# 重建背包面板（安全：先标记再重建）
 		if is_instance_valid(main_panel):
 			main_panel.queue_free()
 		_show_inventory_panel()
