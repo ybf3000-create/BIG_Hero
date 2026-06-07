@@ -24,14 +24,8 @@ const GRID_TYPES = [
 	{ "icon": "💰", "name": "空地2",     "clr": Color(0.3, 0.5, 0.2) },
 ]
 
-# 扑克牌花色
+# 扑克牌花色（工具常量已移至 UIUtils）
 const SUITS := ["♠", "♣", "♥", "♦"]
-const SUIT_COLORS := {
-	"♠": Color(0.75, 0.78, 0.82),
-	"♣": Color(0.75, 0.78, 0.82),
-	"♥": Color(1.0, 0.15, 0.15),
-	"♦": Color(1.0, 0.15, 0.15),
-}
 
 # -- 玩家状态 --
 var player_name: String = "勇者"
@@ -69,12 +63,16 @@ const ItemDBRef = preload("res://scripts/item_db.gd")
 const EquipGenCls = preload("res://scripts/equip_gen.gd")
 const SkillDataRef = preload("res://scripts/skill_data.gd")
 const SkillCls = preload("res://scripts/skill_system.gd")
+const UIUtilsRef = preload("res://scripts/ui/ui_utils.gd")
+const TopBarCls = preload("res://scripts/ui/top_bar.gd")
 
 # 子系统
 var dice: RefCounted
 var executor: RefCounted
 var inventory: RefCounted
 var skill_system: RefCounted
+var equipment: RefCounted
+var top_bar: TopBar
 
 # 技能槽位（内嵌管理，6槽）
 
@@ -126,14 +124,16 @@ func _ready() -> void:
 	equipment = EquipmentCls.new()
 	skill_system = SkillCls.new()
 
+	top_bar = TopBarCls.new(self)
+
 	# 从选择界面传来的存档数据
 	if has_meta("save_slot") and has_meta("save_data"):
 		_current_slot = get_meta("save_slot") as int
 		var data: Dictionary = get_meta("save_data") as Dictionary
 		_load_from_save_data(data)
 
-	_build_top_bar()
-	_refresh_poker_slots()  # TopBar 创建后才能刷新牌型显示
+	top_bar.build()
+	top_bar.refresh_poker_slots()  # TopBar 创建后才能刷新牌型显示
 	_build_map_area()
 	_build_bottom_bar()
 	if map_grids.is_empty():
@@ -156,252 +156,12 @@ func _sm():
 ## ============================================================
 ## 第一部分 — 顶部属性栏
 ## ============================================================
-func _build_top_bar() -> void:
-	var bar := Panel.new()
-	bar.name = "TopBar"
-	bar.position = Vector2(0, 0)
-	bar.size = Vector2(1280, 128)
-	_panel_style(bar, Color(0.10, 0.10, 0.14))
-
-	# -- 角色头像 --
-	var avatar_bg := ColorRect.new()
-	avatar_bg.name = "AvatarBg"
-	avatar_bg.position = Vector2(8, 8)
-	avatar_bg.size = Vector2(94, 94)
-	avatar_bg.color = Color(0.18, 0.18, 0.28)
-	bar.add_child(avatar_bg)
-
-	var avatar_tex := load("res://assets/主角.png")
-	if avatar_tex:
-		var avatar := TextureRect.new()
-		avatar.name = "AvatarImg"
-		avatar.position = Vector2(10, 10)
-		avatar.size = Vector2(90, 90)
-		avatar.texture = avatar_tex
-		avatar.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		avatar.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		bar.add_child(avatar)
-	else:
-		var fallback := Label.new()
-		fallback.name = "AvatarFallback"
-		fallback.text = "👤"
-		fallback.add_theme_font_size_override("font_size", 48)
-		fallback.position = Vector2(28, 20)
-		bar.add_child(fallback)
-
-	# 头像点击区域（打开属性面板）
-	var avatar_btn := Button.new()
-	avatar_btn.name = "AvatarBtn"
-	avatar_btn.flat = true
-	avatar_btn.position = Vector2(8, 8)
-	avatar_btn.size = Vector2(94, 94)
-	_btn_transparent2(avatar_btn)
-	avatar_btn.pressed.connect(_show_stats_panel)
-	bar.add_child(avatar_btn)
-
-	# -- 名字 + 等级 --
-	var name_lbl := Label.new()
-	name_lbl.name = "NameLabel"
-	name_lbl.text = player_name
-	name_lbl.add_theme_font_size_override("font_size", 24)
-	name_lbl.add_theme_color_override("font_color", Color.WHITE)
-	name_lbl.position = Vector2(112, 8)
-	bar.add_child(name_lbl)
-
-	var lv_lbl := Label.new()
-	lv_lbl.name = "LevelLabel"
-	lv_lbl.text = "Lv." + str(player_level)
-	lv_lbl.add_theme_font_size_override("font_size", 16)
-	lv_lbl.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
-	lv_lbl.position = Vector2(112, 34)
-	bar.add_child(lv_lbl)
-
-	# -- 经验条 --
-	var exp_bar := ProgressBar.new()
-	exp_bar.name = "ExpBar"
-	exp_bar.position = Vector2(112, 58)
-	exp_bar.size = Vector2(240, 16)
-	exp_bar.value = player_exp
-	exp_bar.max_value = player_exp_max
-	_bar_style(exp_bar, Color(0.15, 0.35, 0.6))
-	bar.add_child(exp_bar)
-
-	var exp_lbl := Label.new()
-	exp_lbl.name = "ExpLabel"
-	exp_lbl.text = str(player_exp) + "/" + str(player_exp_max)
-	exp_lbl.add_theme_font_size_override("font_size", 10)
-	exp_lbl.add_theme_color_override("font_color", Color(0.85, 0.85, 0.85))
-	exp_lbl.position = Vector2(117, 59)
-	exp_lbl.size = Vector2(230, 14)
-	exp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	bar.add_child(exp_lbl)
-
-	# -- 复活币 --
-	var rv_icon := Label.new()
-	rv_icon.text = "💀"
-	rv_icon.add_theme_font_size_override("font_size", 22)
-	rv_icon.position = Vector2(370, 8)
-	bar.add_child(rv_icon)
-
-	var rv_lbl := Label.new()
-	rv_lbl.name = "ReviveLabel"
-	rv_lbl.text = str(player_revive) + "/" + str(player_max_revive)
-	rv_lbl.add_theme_font_size_override("font_size", 16)
-	rv_lbl.add_theme_color_override("font_color", Color(0.3, 0.9, 0.9))
-	rv_lbl.position = Vector2(400, 10)
-	bar.add_child(rv_lbl)
-
-	# -- 金币 --
-	var gold_icon := Label.new()
-	gold_icon.text = "🪙"
-	gold_icon.add_theme_font_size_override("font_size", 22)
-	gold_icon.position = Vector2(370, 40)
-	bar.add_child(gold_icon)
-
-	var gold_lbl := Label.new()
-	gold_lbl.name = "GoldLabel"
-	gold_lbl.text = str(player_gold)
-	gold_lbl.add_theme_font_size_override("font_size", 16)
-	gold_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
-	gold_lbl.position = Vector2(400, 42)
-	bar.add_child(gold_lbl)
-
-	# -- 掷骰奖励提示 --
-	var reward_lbl := Label.new()
-	reward_lbl.name = "DiceRewardLabel"
-	reward_lbl.text = "🎲 掷骰奖励: 过起点 +50金"
-	reward_lbl.add_theme_font_size_override("font_size", 13)
-	reward_lbl.add_theme_color_override("font_color", Color(1.0, 0.7, 0.2))
-	reward_lbl.position = Vector2(370, 68)
-	bar.add_child(reward_lbl)
-
-	# -- 骰子花色历史 --
-	var dice_hist := Label.new()
-	dice_hist.name = "DiceHistLabel"
-	dice_hist.text = "花色记录: "
-	dice_hist.add_theme_font_size_override("font_size", 12)
-	dice_hist.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
-	dice_hist.position = Vector2(112, 84)
-	bar.add_child(dice_hist)
-
-	# ============ 紧凑属性行（装备词条实时刷新） ============
-	var compact_labels: Array[Dictionary] = [
-		{ "name": "StatLabel_atk",  "prefix": "⚔", "key": "atk" },
-		{ "name": "StatLabel_def",  "prefix": "🛡", "key": "def" },
-		{ "name": "StatLabel_hp",   "prefix": "❤", "key": "hp" },
-		{ "name": "StatLabel_spd",  "prefix": "👟", "key": "spd" },
-		{ "name": "StatLabel_luk",  "prefix": "🍀", "key": "luk" },
-		{ "name": "StatLabel_crit", "prefix": "💥", "key": "crit" },
-		{ "name": "StatLabel_dodge","prefix": "💨", "key": "dodge" },
-		{ "name": "StatLabel_block","prefix": "🛡", "key": "block" },
-	]
-	var csx: float = 112.0
-	for ci in range(compact_labels.size()):
-		var cd: Dictionary = compact_labels[ci]
-		var cl: Label = Label.new()
-		cl.name = cd["name"]
-		cl.text = cd["prefix"] + " 0"
-		cl.add_theme_font_size_override("font_size", 11)
-		cl.add_theme_color_override("font_color", Color(0.6, 0.65, 0.7))
-		cl.position = Vector2(csx + ci * 82, 104)
-		bar.add_child(cl)
-
-	_refresh_compact_stats()
-
-	# ============ 右侧：掷骰点数 + 花色 + 牌型记录 ============
-	var sep := VSeparator.new()
-	sep.position = Vector2(620, 12)
-	sep.size = Vector2(2, 86)
-	bar.add_child(sep)
-
-	var dice_title := Label.new()
-	dice_title.text = "本次掷骰"
-	dice_title.add_theme_font_size_override("font_size", 11)
-	dice_title.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
-	dice_title.position = Vector2(640, 6)
-	bar.add_child(dice_title)
-
-	var dice_num := Label.new()
-	dice_num.name = "DiceNumLabel"
-	dice_num.text = "--"
-	dice_num.add_theme_font_size_override("font_size", 36)
-	dice_num.add_theme_color_override("font_color", Color(1.0, 0.9, 0.3))
-	dice_num.position = Vector2(640, 18)
-	dice_num.size = Vector2(60, 42)
-	bar.add_child(dice_num)
-
-	var suit_lbl := Label.new()
-	suit_lbl.name = "DiceSuitLabel"
-	suit_lbl.text = ""
-	suit_lbl.add_theme_font_size_override("font_size", 40)
-	suit_lbl.position = Vector2(708, 16)
-	suit_lbl.size = Vector2(50, 48)
-	bar.add_child(suit_lbl)
-
-	var poker_title := Label.new()
-	poker_title.text = "牌型记录 (3次结算)"
-	poker_title.add_theme_font_size_override("font_size", 11)
-	poker_title.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
-	poker_title.position = Vector2(780, 6)
-	bar.add_child(poker_title)
-
-	for i in range(3):
-		var slot_bg := ColorRect.new()
-		slot_bg.name = "PokerSlotBg" + str(i)
-		slot_bg.position = Vector2(780 + i * 115, 20)
-		slot_bg.size = Vector2(105, 62)
-		slot_bg.color = Color(0.15, 0.15, 0.22)
-		bar.add_child(slot_bg)
-
-		var val_lbl := Label.new()
-		val_lbl.name = "PokerVal" + str(i)
-		val_lbl.text = "-"
-		val_lbl.add_theme_font_size_override("font_size", 22)
-		val_lbl.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9))
-		val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		val_lbl.position = Vector2(780 + i * 115, 22)
-		val_lbl.size = Vector2(60, 30)
-		bar.add_child(val_lbl)
-
-		var suit_s := Label.new()
-		suit_s.name = "PokerSuit" + str(i)
-		suit_s.text = ""
-		suit_s.add_theme_font_size_override("font_size", 22)
-		suit_s.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		suit_s.position = Vector2(780 + i * 115, 42)
-		suit_s.size = Vector2(60, 30)
-		bar.add_child(suit_s)
-
-		if i < 2:
-			var arrow := Label.new()
-			arrow.text = "→"
-			arrow.add_theme_font_size_override("font_size", 14)
-			arrow.add_theme_color_override("font_color", Color(0.3, 0.3, 0.4))
-			arrow.position = Vector2(888 + i * 115, 36)
-			bar.add_child(arrow)
-
-	var poker_result := Label.new()
-	poker_result.name = "PokerResultLabel"
-	poker_result.text = ""
-	poker_result.add_theme_font_size_override("font_size", 14)
-	poker_result.add_theme_color_override("font_color", Color(1.0, 0.8, 0.2))
-	poker_result.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	poker_result.position = Vector2(780, 86)
-	poker_result.size = Vector2(350, 20)
-	bar.add_child(poker_result)
-
-	add_child(bar)
-
-
-## ============================================================
-## 第二部分 — 中部大地图（菱形格子 + 主角叠加）
-## ============================================================
 func _build_map_area() -> void:
 	var area := Panel.new()
 	area.name = "MapArea"
 	area.position = Vector2(0, 130)
 	area.size = Vector2(1280, 400)
-	_panel_style(area, Color(0.06, 0.07, 0.09))
+	UIUtils.panel_style(area, Color(0.06, 0.07, 0.09))
 
 	# -- 平行四边形地块（下移到靠近底部，不占底部UI） --
 	var total_span := TILE_COUNT * TILE_W
@@ -497,7 +257,7 @@ func _build_bottom_bar() -> void:
 	bar.name = "BottomBar"
 	bar.position = Vector2(0, 532)
 	bar.size = Vector2(1280, 86)
-	_panel_style(bar, Color(0.10, 0.10, 0.16))
+	UIUtils.panel_style(bar, Color(0.10, 0.10, 0.16))
 
 	# 单行布局：4小按钮(w=170) + 1大按钮(w=260) = 940，剩余 340 / 6间隔 = 57
 	const SMALL_W := 170
@@ -516,7 +276,7 @@ func _build_bottom_bar() -> void:
 	dice_btn.text = "🎲  掷  骰"
 	dice_btn.position = Vector2(dice_x, dice_y)
 	dice_btn.size = Vector2(DICE_W, DICE_H)
-	_btn_style(dice_btn, Color(0.15, 0.28, 0.50))
+	UIUtils.btn_style(dice_btn, Color(0.15, 0.28, 0.50))
 	dice_btn.add_theme_font_size_override("font_size", 22)
 	bar.add_child(dice_btn)
 
@@ -533,7 +293,7 @@ func _build_bottom_bar() -> void:
 		btn.text = b["text"]
 		btn.position = Vector2(b["x"], btn_y)
 		btn.size = Vector2(SMALL_W, SMALL_H)
-		_btn_style(btn, Color(0.18, 0.22, 0.34))
+		UIUtils.btn_style(btn, Color(0.18, 0.22, 0.34))
 		btn.add_theme_font_size_override("font_size", 16)
 		bar.add_child(btn)
 
@@ -542,7 +302,7 @@ func _build_bottom_bar() -> void:
 	gem_btn.text = "💎 生成宝石"
 	gem_btn.position = Vector2(8, 314)
 	gem_btn.size = Vector2(100, 28)
-	_btn_style_mini(gem_btn, Color(0.38, 0.12, 0.38))
+	UIUtils.btn_style_mini(gem_btn, Color(0.38, 0.12, 0.38))
 	gem_btn.pressed.connect(_on_test_generate_gem)
 	add_child(gem_btn)
 
@@ -551,7 +311,7 @@ func _build_bottom_bar() -> void:
 	freept_btn.text = "⭐ +自由点"
 	freept_btn.position = Vector2(332, 314)
 	freept_btn.size = Vector2(100, 28)
-	_btn_style_mini(freept_btn, Color(0.3, 0.25, 0.1))
+	UIUtils.btn_style_mini(freept_btn, Color(0.3, 0.25, 0.1))
 	freept_btn.pressed.connect(func():
 		player_free_points += 1
 		_show_float_text("+1 自由属性点 (共" + str(player_free_points) + "点)", Color(1.0, 0.85, 0.2))
@@ -564,7 +324,7 @@ func _build_bottom_bar() -> void:
 	lottery_btn.text = "🎰 生成彩票"
 	lottery_btn.position = Vector2(224, 314)
 	lottery_btn.size = Vector2(100, 28)
-	_btn_style_mini(lottery_btn, Color(0.38, 0.08, 0.18))
+	UIUtils.btn_style_mini(lottery_btn, Color(0.38, 0.08, 0.18))
 	lottery_btn.pressed.connect(_on_test_generate_lottery)
 	add_child(lottery_btn)
 
@@ -574,7 +334,7 @@ func _build_bottom_bar() -> void:
 	test_btn.text = "🔧 生成装备"
 	test_btn.position = Vector2(116, 314)
 	test_btn.size = Vector2(100, 28)
-	_btn_style_mini(test_btn, Color(0.22, 0.15, 0.38))
+	UIUtils.btn_style_mini(test_btn, Color(0.22, 0.15, 0.38))
 	test_btn.pressed.connect(_on_test_generate_equip)
 	add_child(test_btn)
 
@@ -650,10 +410,10 @@ func _load_from_save_data(data: Dictionary) -> void:
 	equip_instances.clear()
 	for item in data.get("equip_instances", []):
 		equip_instances.append(EquipGenCls.deserialize(item as Dictionary))
-	_skill_update_max(player_level)
+	skill_system.update_max_slots(player_level)
 	skill_system.from_dict(data.get("skill_system", {}))
 	skill_system.update_max_slots(player_level)
-	# _refresh_poker_slots() 延迟到 _build_top_bar() 之后
+	# refresh_poker_slots() 延迟到 top_bar.build() 之后
 
 
 ## ============================================================
@@ -694,11 +454,11 @@ func _on_dice_roll() -> void:
 	last_dice_roll = dice.roll()
 	last_dice_suit = SUITS[randi() % 4]
 
-	_refresh_dice_display()
+	top_bar.refresh_dice_display()
 
 	var record := { "value": last_dice_roll, "suit": last_dice_suit }
 	poker_records.append(record)
-	_refresh_poker_slots()
+	top_bar.refresh_poker_slots()
 
 	_show_dice_popup(last_dice_roll, last_dice_suit)
 
@@ -755,7 +515,7 @@ func _process(delta: float) -> void:
 			var rl: Label = $TopBar/DiceRewardLabel as Label
 			if rl:
 				rl.text = "🎲 过起点 +50金!"
-			_refresh_top_bar()
+			top_bar.refresh()
 
 		_refresh_grid_display()
 		_slide_grids()
@@ -836,14 +596,14 @@ func _on_move_complete() -> void:
 		var bt: String = "dmg_x" + ("1.3" if bname == "技能大赛" else "0.7")
 		_add_buff(bname, bt, turns)
 
-	_check_poker_hand()
+	top_bar.check_poker_hand()
 	_check_lottery_draw()
 
 	# 应用格子经验收益
 	if edata.has("exp_gain"):
 		_add_exp(edata["exp_gain"])
 
-	_refresh_top_bar()
+	top_bar.refresh()
 	_auto_save()
 	if auto_play_enabled:
 		_start_auto_timer()
@@ -871,7 +631,7 @@ func _add_exp(amount: int) -> void:
 		player_free_points += 2
 		player_exp_max = int(100.0 * pow(1.12, player_level - 1))
 		_show_float_text("🎉 升级! Lv." + str(player_level) + " 获得2点自由属性点", Color(0.3, 1.0, 0.6))
-	_refresh_top_bar()
+	top_bar.refresh()
 
 
 ## 消耗自由属性点加点
@@ -1000,7 +760,7 @@ func _show_lottery_popup(win_num: String, hit: bool) -> void:
 	var popup: Panel = Panel.new()
 	popup.position = Vector2(390, 180)
 	popup.size = Vector2(500, 320)
-	_panel_style(popup, Color(0.08, 0.06, 0.15, 0.98))
+	UIUtils.panel_style(popup, Color(0.08, 0.06, 0.15, 0.98))
 	ov.add_child(popup)
 
 	var title: Label = Label.new()
@@ -1081,142 +841,12 @@ func _spawn_confetti(parent: Control) -> void:
 ## ============================================================
 ## 扑克牌牌型检测
 ## ============================================================
-func _check_poker_hand() -> void:
-	if poker_records.size() < 3:
-		return
-
-	var vals: Array[int] = []
-	var suits_arr: Array[String] = []
-	for r in poker_records:
-		vals.append(r["value"] as int)
-		suits_arr.append(r["suit"] as String)
-
-	var sorted: Array[int] = vals.duplicate()
-	sorted.sort()
-
-	var is_flush: bool = (suits_arr[0] == suits_arr[1] and suits_arr[1] == suits_arr[2])
-	var is_straight: bool = (sorted[2] - sorted[1] == 1 and sorted[1] - sorted[0] == 1)
-
-	var count_map: Dictionary = {}
-	for v in vals:
-		count_map[v] = count_map.get(v, 0) + 1
-	var max_count: int = 0
-	for c in count_map.values():
-		max_count = max(max_count, c as int)
-
-	var hand_name: String = ""
-	var multiplier: int = 0
-
-	if is_flush and is_straight:
-		hand_name = "同花顺"; multiplier = 10
-	elif max_count >= 3:
-		hand_name = "三条"; multiplier = 6
-	elif is_straight:
-		hand_name = "顺子"; multiplier = 4
-	elif is_flush:
-		hand_name = "同花"; multiplier = 3
-	elif max_count >= 2:
-		hand_name = "一对"; multiplier = 2
-
-	var result_lbl: Label = $TopBar/PokerResultLabel as Label
-	if multiplier > 0:
-		var bonus := player_level * (randi() % 41 + 10) * multiplier
-		player_gold += bonus
-		if result_lbl:
-			result_lbl.text = hand_name + "！+" + str(bonus) + "金 (×" + str(multiplier) + ")"
-	else:
-		if result_lbl:
-			result_lbl.text = "未成牌型"
-
-	poker_records.clear()
-
-
-## ============================================================
-## 刷新
-## ============================================================
-func _refresh_dice_display() -> void:
-	var num_lbl: Label = $TopBar/DiceNumLabel as Label
-	if num_lbl:
-		num_lbl.text = str(last_dice_roll)
-	var suit_lbl: Label = $TopBar/DiceSuitLabel as Label
-	if suit_lbl:
-		suit_lbl.text = last_dice_suit
-		suit_lbl.add_theme_color_override("font_color", _suit_color(last_dice_suit))
-
-
-func _refresh_poker_slots() -> void:
-	for i in range(3):
-		var val_lbl: Label = $TopBar.get_node("PokerVal" + str(i)) as Label
-		var suit_lbl: Label = $TopBar.get_node("PokerSuit" + str(i)) as Label
-		if i < poker_records.size():
-			var rec := poker_records[i]
-			if val_lbl:
-				val_lbl.text = str(rec["value"])
-			if suit_lbl:
-				suit_lbl.text = rec["suit"]
-				suit_lbl.add_theme_color_override("font_color", _suit_color(rec["suit"]))
-		else:
-			if val_lbl:
-				val_lbl.text = "-"
-			if suit_lbl:
-				suit_lbl.text = ""
-				suit_lbl.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
-
-
-func _suit_color(s: String) -> Color:
-	return SUIT_COLORS.get(s, Color(0.8, 0.8, 0.8))
-
-
-func _refresh_top_bar() -> void:
-	var lv_lbl: Label = $TopBar/LevelLabel as Label
-	if lv_lbl:
-		lv_lbl.text = "Lv." + str(player_level)
-	var exp_bar: ProgressBar = $TopBar/ExpBar as ProgressBar
-	if exp_bar:
-		exp_bar.value = player_exp
-		exp_bar.max_value = player_exp_max
-	var exp_lbl: Label = $TopBar/ExpLabel as Label
-	if exp_lbl:
-		exp_lbl.text = str(player_exp) + "/" + str(player_exp_max)
-	var gold_lbl: Label = $TopBar/GoldLabel as Label
-	if gold_lbl:
-		gold_lbl.text = str(player_gold)
-	var rv_lbl: Label = $TopBar/ReviveLabel as Label
-	if rv_lbl:
-		rv_lbl.text = str(player_revive) + "/" + str(player_max_revive)
-	_refresh_compact_stats()
-
-
-## 刷新顶部栏紧凑属性行（8个核心属性）
-func _refresh_compact_stats() -> void:
-	var ps: Dictionary = _calc_player_stats()
-	var keys: Array[String] = ["atk", "def", "hp", "spd", "luk", "crit", "dodge", "block"]
-	var prefixes: Array[String] = ["⚔", "🛡", "❤", "👟", "🍀", "💥", "💨", "🛡"]
-	var bar: Node = get_node_or_null("TopBar")
-	if not bar:
-		return
-	for i in range(keys.size()):
-		var lbl: Label = bar.get_node_or_null("StatLabel_" + keys[i]) as Label
-		if not lbl:
-			continue
-		var val = ps.get(keys[i], 0)
-		var val_str: String = str(val)
-		if keys[i] in ["crit", "dodge", "block"]:
-			val_str = str(val) + "%"
-		lbl.text = prefixes[i] + " " + val_str
-		# 非零值高亮
-		var highlight: bool = false
-		match keys[i]:
-			"atk", "def", "hp": highlight = (val as int) > 0
-			"spd", "luk":        highlight = (val as int) > 0
-			"crit", "dodge", "block": highlight = (val as int) > 0
-		lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2) if highlight else Color(0.6, 0.65, 0.7))
 
 
 ## 统一刷新所有属性面板（穿脱装备后调用）
 func _refresh_all_stats_panels() -> void:
-	_refresh_top_bar()
-	_refresh_compact_stats()
+	top_bar.refresh()
+	top_bar.refresh_compact_stats()
 	# 如果属性面板正打开着，关闭后下次打开会显示最新值
 	var sp: Node = get_node_or_null("StatsPanel")
 	if sp:
@@ -1284,7 +914,7 @@ func _show_dice_popup(roll: int, suit: String) -> void:
 	popup.name = "DicePopup"
 	popup.position = Vector2(500, 170)
 	popup.size = Vector2(280, 180)
-	_panel_style(popup, Color(0.12, 0.12, 0.20, 0.94))
+	UIUtils.panel_style(popup, Color(0.12, 0.12, 0.20, 0.94))
 
 	var num_label := Label.new()
 	num_label.text = str(roll)
@@ -1298,7 +928,7 @@ func _show_dice_popup(roll: int, suit: String) -> void:
 	var suit_label := Label.new()
 	suit_label.text = suit
 	suit_label.add_theme_font_size_override("font_size", 56)
-	suit_label.add_theme_color_override("font_color", _suit_color(suit))
+	suit_label.add_theme_color_override("font_color", UIUtils.suit_color(suit))
 	suit_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	suit_label.position = Vector2(140, 20)
 	suit_label.size = Vector2(120, 60)
@@ -1313,12 +943,6 @@ func _show_dice_popup(roll: int, suit: String) -> void:
 	)
 
 
-## ============ 按钮回调 ============
-func _qcolor(q: int) -> Color:
-	return EquipData.QUALITY_COLORS.get(q, Color.GRAY)
-
-
-## 通用飘字提示
 ## 画面正中偏上，渐入上浮渐出，3秒消失，新提示顶替旧提示
 func _show_float_text(text: String, clr: Color = Color.WHITE) -> void:
 	if _float_text_node and is_instance_valid(_float_text_node):
@@ -1546,7 +1170,7 @@ func _show_reset_confirm() -> void:
 	dialog.name = "ResetConfirmDialog"
 	dialog.position = Vector2(340, 280)
 	dialog.size = Vector2(360, 180)
-	_panel_style(dialog, Color(0.06, 0.07, 0.14, 0.95))
+	UIUtils.panel_style(dialog, Color(0.06, 0.07, 0.14, 0.95))
 
 	var title: Label = Label.new()
 	title.text = "🔄 洗点确认"
@@ -1566,7 +1190,7 @@ func _show_reset_confirm() -> void:
 	confirm_btn.text = "确认洗点"
 	confirm_btn.position = Vector2(60, 120)
 	confirm_btn.size = Vector2(100, 36)
-	_btn_style_mini(confirm_btn, Color(0.3, 0.12, 0.12))
+	UIUtils.btn_style_mini(confirm_btn, Color(0.3, 0.12, 0.12))
 	confirm_btn.add_theme_color_override("font_color", Color(1.0, 0.6, 0.6))
 	confirm_btn.pressed.connect(func():
 		_reset_stats()
@@ -1580,7 +1204,7 @@ func _show_reset_confirm() -> void:
 	cancel_btn.text = "取消"
 	cancel_btn.position = Vector2(200, 120)
 	cancel_btn.size = Vector2(80, 36)
-	_btn_style_mini(cancel_btn, Color(0.2, 0.2, 0.3))
+	UIUtils.btn_style_mini(cancel_btn, Color(0.2, 0.2, 0.3))
 	cancel_btn.pressed.connect(func():
 		var d4 := get_node_or_null("ResetConfirmDialog")
 		if d4: d4.queue_free()
@@ -1609,7 +1233,7 @@ func _build_inventory_panel() -> void:
 	panel.name = "InventoryPanel"
 	panel.position = Vector2(140, 60)
 	panel.size = Vector2(1000, 550)
-	_panel_style(panel, Color(0.10, 0.10, 0.16))
+	UIUtils.panel_style(panel, Color(0.10, 0.10, 0.16))
 
 	# 标题
 	var title: Label = Label.new()
@@ -1667,7 +1291,7 @@ func _build_inventory_panel() -> void:
 	var equip_panel: Panel = Panel.new()
 	equip_panel.position = Vector2(16, 50)
 	equip_panel.size = Vector2(280, 390)
-	_panel_style(equip_panel, Color(0.08, 0.09, 0.13))
+	UIUtils.panel_style(equip_panel, Color(0.08, 0.09, 0.13))
 	panel.add_child(equip_panel)
 
 	var equip_title: Label = Label.new()
@@ -1681,7 +1305,7 @@ func _build_inventory_panel() -> void:
 	stat_btn.text = "?"
 	stat_btn.position = Vector2(70, 8)
 	stat_btn.size = Vector2(26, 22)
-	_btn_style_mini(stat_btn, Color(0.15, 0.22, 0.38))
+	UIUtils.btn_style_mini(stat_btn, Color(0.15, 0.22, 0.38))
 	stat_btn.pressed.connect(_show_stats_panel)
 	equip_panel.add_child(stat_btn)
 
@@ -1726,7 +1350,7 @@ func _build_inventory_panel() -> void:
 			var eqp: Dictionary = equipment.get_slot_item(es["name"])
 			if not eqp.is_empty():
 				# 品质色边框
-				var qclr: Color = _qcolor(eqp.get("quality", 0))
+				var qclr: Color = UIUtils.qcolor(eqp.get("quality", 0))
 				var qb2 := StyleBoxFlat.new()
 				qb2.bg_color = Color(1,1,1,0)
 				qb2.border_width_left = 2; qb2.border_width_right = 2
@@ -1778,7 +1402,7 @@ func _build_inventory_panel() -> void:
 				slot_btn.flat = true
 				slot_btn.position = Vector2(rx, ry + 16)
 				slot_btn.size = Vector2(50, 50)
-				_btn_transparent2(slot_btn)
+				UIUtils.btn_transparent2(slot_btn)
 				var esn: String = es["name"]
 				slot_btn.gui_input.connect(func(ev: InputEvent):
 					if ev is InputEventMouseButton and ev.pressed:
@@ -1810,7 +1434,7 @@ func _build_inventory_panel() -> void:
 	item_area.name = "ItemArea"
 	item_area.position = Vector2(310, 50)
 	item_area.size = Vector2(674, 390)
-	_panel_style(item_area, Color(0.08, 0.09, 0.13))
+	UIUtils.panel_style(item_area, Color(0.08, 0.09, 0.13))
 	panel.add_child(item_area)
 
 	# 过滤 + 内容（由 _rebuild_filters 统一管理）
@@ -1838,7 +1462,7 @@ func _build_inventory_panel() -> void:
 	dismantle_btn.text = "♻ 分解"
 	dismantle_btn.position = Vector2(900, bottom_y)
 	dismantle_btn.size = Vector2(80, 30)
-	_btn_style_mini(dismantle_btn, Color(0.2, 0.12, 0.2))
+	UIUtils.btn_style_mini(dismantle_btn, Color(0.2, 0.12, 0.2))
 	dismantle_btn.pressed.connect(func(): _show_dismantle_panel(panel))
 	panel.add_child(dismantle_btn)
 
@@ -1847,7 +1471,7 @@ func _build_inventory_panel() -> void:
 	close_btn.text = "✕ 关闭"
 	close_btn.position = Vector2(910, 8)
 	close_btn.size = Vector2(70, 24)
-	_btn_style_mini(close_btn, Color(0.25, 0.15, 0.15))
+	UIUtils.btn_style_mini(close_btn, Color(0.25, 0.15, 0.15))
 	close_btn.pressed.connect(panel.queue_free)
 	panel.add_child(close_btn)
 
@@ -1888,7 +1512,7 @@ func _rebuild_filters(item_area: Panel, main_panel: Panel) -> void:
 		var qv: int = qi - 1
 		var selected: bool = (qv == -1 and _inv_filter_quality.is_empty()) or _inv_filter_quality.has(qv)
 		var clr: Color = qclrvals[qi]
-		_btn_style_mini(qb, clr.darkened(0.3) if not selected else clr.lightened(0.1))
+		UIUtils.btn_style_mini(qb, clr.darkened(0.3) if not selected else clr.lightened(0.1))
 		if qi == 0:
 			qb.add_theme_color_override("font_color", Color(1,1,1))
 		else:
@@ -1925,7 +1549,7 @@ func _rebuild_filters(item_area: Panel, main_panel: Panel) -> void:
 			sb.add_theme_font_size_override("font_size", 12)
 			var sv: int = si - 1
 			var ssel: bool = (sv == -1 and _inv_filter_slot.is_empty()) or _inv_filter_slot.has(sv)
-			_btn_style_mini(sb, Color(0.15, 0.18, 0.35) if not ssel else Color(0.25, 0.40, 0.60))
+			UIUtils.btn_style_mini(sb, Color(0.15, 0.18, 0.35) if not ssel else Color(0.25, 0.40, 0.60))
 			sb.add_theme_color_override("font_color", Color(1,1,1) if ssel else Color(0.7,0.75,0.8))
 			sb.pressed.connect(func():
 				if sv == -1:
@@ -1983,7 +1607,7 @@ func _show_expansion_confirm(main_panel: Panel) -> void:
 	dialog.name = "ExpansionConfirm"
 	dialog.position = Vector2(340, 280)
 	dialog.size = Vector2(360, 180)
-	_panel_style(dialog, Color(0.06, 0.07, 0.14, 0.95))
+	UIUtils.panel_style(dialog, Color(0.06, 0.07, 0.14, 0.95))
 
 	var title: Label = Label.new()
 	title.text = "📦 背包扩容"
@@ -2004,7 +1628,7 @@ func _show_expansion_confirm(main_panel: Panel) -> void:
 	confirm_btn.text = "确认扩容"
 	confirm_btn.position = Vector2(60, 120)
 	confirm_btn.size = Vector2(100, 36)
-	_btn_style_mini(confirm_btn, Color(0.1, 0.3, 0.15))
+	UIUtils.btn_style_mini(confirm_btn, Color(0.1, 0.3, 0.15))
 	confirm_btn.add_theme_color_override("font_color", Color(0.3, 1.0, 0.5))
 	confirm_btn.pressed.connect(func():
 		# 点击确认时才检查金币
@@ -2024,7 +1648,7 @@ func _show_expansion_confirm(main_panel: Panel) -> void:
 		if is_instance_valid(main_panel):
 			main_panel.queue_free()
 		_show_inventory_panel()
-		_refresh_top_bar()
+		top_bar.refresh()
 	)
 	dialog.add_child(confirm_btn)
 
@@ -2032,7 +1656,7 @@ func _show_expansion_confirm(main_panel: Panel) -> void:
 	cancel_btn.text = "取消"
 	cancel_btn.position = Vector2(200, 120)
 	cancel_btn.size = Vector2(80, 36)
-	_btn_style_mini(cancel_btn, Color(0.2, 0.2, 0.3))
+	UIUtils.btn_style_mini(cancel_btn, Color(0.2, 0.2, 0.3))
 	cancel_btn.pressed.connect(func():
 		var d4 := get_node_or_null("ExpansionConfirm")
 		if d4: d4.queue_free()
@@ -2106,7 +1730,7 @@ func _build_consume_tab(area: Panel, main_panel: Panel) -> void:
 			btn.flat = true
 			btn.position = Vector2(x, y)
 			btn.size = Vector2(icon_s, icon_s)
-			_btn_transparent2(btn)
+			UIUtils.btn_transparent2(btn)
 			var si: int = i
 			btn.pressed.connect(func():
 				_on_item_action(si)
@@ -2158,7 +1782,7 @@ func _build_equip_tab(area: Panel, main_panel: Panel) -> void:
 			var eqp: Dictionary = equip_instances[ei]
 
 			# 品质边框
-			var qclr: Color = _qcolor(eqp.get("quality", 0))
+			var qclr: Color = UIUtils.qcolor(eqp.get("quality", 0))
 			var qborder: Panel = Panel.new()
 			qborder.position = Vector2(x - 1, y - 1)
 			qborder.size = Vector2(icon_s + 2, icon_s + 2)
@@ -2196,7 +1820,7 @@ func _build_equip_tab(area: Panel, main_panel: Panel) -> void:
 			btn.flat = true
 			btn.position = Vector2(x, y)
 			btn.size = Vector2(icon_s, icon_s + 16)
-			_btn_transparent2(btn)
+			UIUtils.btn_transparent2(btn)
 			var eidx: int = ei
 			btn.gui_input.connect(func(ev: InputEvent):
 				if ev is InputEventMouseButton and ev.pressed:
@@ -2240,7 +1864,7 @@ func _build_equip_tab(area: Panel, main_panel: Panel) -> void:
 			plus_btn.flat = true
 			plus_btn.position = Vector2(x, y)
 			plus_btn.size = Vector2(icon_s, icon_s)
-			_btn_transparent2(plus_btn)
+			UIUtils.btn_transparent2(plus_btn)
 			plus_btn.pressed.connect(func():
 				_show_expansion_confirm(main_panel)
 			)
@@ -2263,11 +1887,11 @@ func _show_equip_tooltip(eqp: Dictionary, idx: int, slot_name: String, main_pane
 	tip.name = "EquipTooltip"
 	tip.position = Vector2(x_pos, 60)
 	tip.size = Vector2(340, 340)
-	_panel_style(tip, Color(0.06, 0.07, 0.14, 0.97))
+	UIUtils.panel_style(tip, Color(0.06, 0.07, 0.14, 0.97))
 	_tooltip_nodes.append(tip)
 
 	var sy: float = 8.0
-	var qclr: Color = _qcolor(eqp.get("quality", 0))
+	var qclr: Color = UIUtils.qcolor(eqp.get("quality", 0))
 	var qname: String = eqp.get("quality_name", "")
 
 	# 品质色条
@@ -2397,7 +2021,7 @@ func _show_equip_tooltip(eqp: Dictionary, idx: int, slot_name: String, main_pane
 		equip_btn.text = "装备"
 		equip_btn.position = Vector2(12, btn_y)
 		equip_btn.size = Vector2(60, 26)
-		_btn_style_mini(equip_btn, Color(0.15, 0.28, 0.45))
+		UIUtils.btn_style_mini(equip_btn, Color(0.15, 0.28, 0.45))
 		var eid: int = idx
 		equip_btn.pressed.connect(func():
 			_close_all_tooltips()
@@ -2411,7 +2035,7 @@ func _show_equip_tooltip(eqp: Dictionary, idx: int, slot_name: String, main_pane
 		unequip_btn.text = "卸下"
 		unequip_btn.position = Vector2(12, btn_y)
 		unequip_btn.size = Vector2(60, 26)
-		_btn_style_mini(unequip_btn, Color(0.35, 0.12, 0.12))
+		UIUtils.btn_style_mini(unequip_btn, Color(0.35, 0.12, 0.12))
 		var esn: String = slot_name
 		unequip_btn.pressed.connect(func():
 			_close_all_tooltips()
@@ -2514,7 +2138,7 @@ func _show_dismantle_panel(main_panel: Panel) -> void:
 	dp.name = "DismantlePanel"
 	dp.position = Vector2(310, 50)
 	dp.size = Vector2(674, 390)
-	_panel_style(dp, Color(0.06, 0.07, 0.13, 0.98))
+	UIUtils.panel_style(dp, Color(0.06, 0.07, 0.13, 0.98))
 
 	var dtitle: Label = Label.new()
 	dtitle.text = "♻ 装备分解"
@@ -2544,7 +2168,7 @@ func _show_dismantle_panel(main_panel: Panel) -> void:
 	select_all_btn.text = "全选"
 	select_all_btn.position = Vector2(500, 30)
 	select_all_btn.size = Vector2(50, 22)
-	_btn_style_mini(select_all_btn, Color(0.15, 0.22, 0.38))
+	UIUtils.btn_style_mini(select_all_btn, Color(0.15, 0.22, 0.38))
 	select_all_btn.add_theme_font_size_override("font_size", 10)
 	dp.add_child(select_all_btn)
 
@@ -2552,7 +2176,7 @@ func _show_dismantle_panel(main_panel: Panel) -> void:
 	deselect_btn.text = "取消"
 	deselect_btn.position = Vector2(558, 30)
 	deselect_btn.size = Vector2(50, 22)
-	_btn_style_mini(deselect_btn, Color(0.2, 0.12, 0.12))
+	UIUtils.btn_style_mini(deselect_btn, Color(0.2, 0.12, 0.12))
 	deselect_btn.add_theme_font_size_override("font_size", 10)
 	dp.add_child(deselect_btn)
 
@@ -2586,7 +2210,7 @@ func _show_dismantle_panel(main_panel: Panel) -> void:
 			break
 
 		# 品质框
-		var qclr: Color = _qcolor(eqp.get("quality", 0))
+		var qclr: Color = UIUtils.qcolor(eqp.get("quality", 0))
 		var qp: Panel = Panel.new()
 		qp.position = Vector2(x - 1, y - 1)
 		qp.size = Vector2(icon_s + 2, icon_s + 2)
@@ -2666,7 +2290,7 @@ func _show_dismantle_panel(main_panel: Panel) -> void:
 	confirm_btn.text = "确认分解"
 	confirm_btn.position = Vector2(12, 350)
 	confirm_btn.size = Vector2(100, 30)
-	_btn_style_mini(confirm_btn, Color(0.25, 0.1, 0.15))
+	UIUtils.btn_style_mini(confirm_btn, Color(0.25, 0.1, 0.15))
 	confirm_btn.pressed.connect(func():
 		if dismantle_targets.is_empty():
 			return
@@ -2728,7 +2352,7 @@ func _on_item_action(slot_idx: int) -> void:
 		var stats: Dictionary = defn.get("stats", {})
 		player_gold += stats.get("gold_bonus", 0)
 		player_exp += stats.get("exp_bonus", 0)
-		_refresh_top_bar()
+		top_bar.refresh()
 		inventory.remove_item(slot_idx, 1)
 
 
@@ -2867,7 +2491,7 @@ func _build_skill_tab(panel: Panel) -> void:
 	help_btn.position = Vector2(130, sec_y)
 	help_btn.size = Vector2(22, 22)
 	help_btn.add_theme_font_size_override("font_size", 11)
-	_btn_style_mini(help_btn, Color(0.15, 0.22, 0.38))
+	UIUtils.btn_style_mini(help_btn, Color(0.15, 0.22, 0.38))
 	help_btn.pressed.connect(func():
 		_show_stat_tooltip("优先级规则", "点击数字 ①/②/③ 切换优先级\n右键已装备技能可卸下\n\nCD同时归零时：①>②>③\n同级按槽位从左到右释放\n全部CD中→普攻\n\n槽位解锁: Lv.1=2 Lv.5=3 Lv.15=4 Lv.35=5 Lv.45=6")
 	)
@@ -2896,7 +2520,10 @@ func _build_skill_tab(panel: Panel) -> void:
 			lock_bg.size = Vector2(slot_w, slot_h)
 			var lock_st := StyleBoxFlat.new()
 			lock_st.bg_color = Color(0.08, 0.09, 0.14)
-			lock_st.border_width_all = 1
+			lock_st.border_width_left = 1
+			lock_st.border_width_right = 1
+			lock_st.border_width_top = 1
+			lock_st.border_width_bottom = 1
 			lock_st.border_color = Color(0.2, 0.2, 0.3)
 			lock_bg.add_theme_stylebox_override("panel", lock_st)
 			panel.add_child(lock_bg)
@@ -2919,7 +2546,10 @@ func _build_skill_tab(panel: Panel) -> void:
 			skill_bg.size = Vector2(slot_w, slot_h)
 			var sb := StyleBoxFlat.new()
 			sb.bg_color = school_clr.darkened(0.7)
-			sb.border_width_all = 1
+			sb.border_width_left = 1
+			sb.border_width_right = 1
+			sb.border_width_top = 1
+			sb.border_width_bottom = 1
 			sb.border_color = school_clr
 			skill_bg.add_theme_stylebox_override("panel", sb)
 			panel.add_child(skill_bg)
@@ -2951,7 +2581,7 @@ func _build_skill_tab(panel: Panel) -> void:
 			prio_btn.size = Vector2(36, 22)
 			prio_btn.add_theme_font_size_override("font_size", 12)
 			var prio_clr: Color = [Color(0.6, 0.6, 0.6), Color(0.3, 1.0, 0.6), Color(0.3, 0.6, 1.0)][priority-1]
-			_btn_style_mini(prio_btn, Color(0.12, 0.14, 0.22))
+			UIUtils.btn_style_mini(prio_btn, Color(0.12, 0.14, 0.22))
 			prio_btn.add_theme_color_override("font_color", prio_clr)
 			var si: int = i
 			prio_btn.pressed.connect(func():
@@ -2966,7 +2596,7 @@ func _build_skill_tab(panel: Panel) -> void:
 			detail_btn.flat = true
 			detail_btn.position = Vector2(sx, sy)
 			detail_btn.size = Vector2(slot_w - 50, slot_h)
-			_btn_transparent2(detail_btn)
+			UIUtils.btn_transparent2(detail_btn)
 			var sid_cap: int = sid
 			detail_btn.gui_input.connect(func(ev: InputEvent):
 				if ev is InputEventMouseButton and ev.pressed:
@@ -2985,7 +2615,10 @@ func _build_skill_tab(panel: Panel) -> void:
 			empty_bg.size = Vector2(slot_w, slot_h)
 			var es := StyleBoxFlat.new()
 			es.bg_color = Color(1,1,1,0)
-			es.border_width_all = 1
+			es.border_width_left = 1
+			es.border_width_right = 1
+			es.border_width_top = 1
+			es.border_width_bottom = 1
 			es.border_color = Color(0.25, 0.25, 0.35)
 			es.set_corner_radius_all(4)
 			empty_bg.add_theme_stylebox_override("panel", es)
@@ -3028,7 +2661,7 @@ func _build_skill_tab(panel: Panel) -> void:
 		qb.size = Vector2(44, 22)
 		qb.add_theme_font_size_override("font_size", 11)
 		var selected: bool = (_skill_filter == qi - 1 and qi > 0) or (qi == 0 and _skill_filter < 0)
-		_btn_style_mini(qb, school_colors[qi].darkened(0.5) if not selected else school_colors[qi].lightened(0.2))
+		UIUtils.btn_style_mini(qb, school_colors[qi].darkened(0.5) if not selected else school_colors[qi].lightened(0.2))
 		qb.add_theme_color_override("font_color", Color(1,1,1) if selected else school_colors[qi])
 		qb.pressed.connect(func():
 			_skill_filter = qi - 1 if qi > 0 else -1
@@ -3069,7 +2702,10 @@ func _build_skill_tab(panel: Panel) -> void:
 		var sc: Color = _skill_school_color(sdata.get("school", 0))
 		var p_style := StyleBoxFlat.new()
 		p_style.bg_color = sc.darkened(0.5) if not equipped else sc.darkened(0.3)
-		p_style.border_width_all = 1
+		p_style.border_width_left = 1
+		p_style.border_width_right = 1
+		p_style.border_width_top = 1
+		p_style.border_width_bottom = 1
 		p_style.border_color = sc
 		var pool_bg: Panel = Panel.new()
 		pool_bg.position = Vector2(cx, cy)
@@ -3103,7 +2739,7 @@ func _build_skill_tab(panel: Panel) -> void:
 			eq_btn.flat = true
 			eq_btn.position = Vector2(cx, cy)
 			eq_btn.size = Vector2(icon_s, 48)
-			_btn_transparent2(eq_btn)
+			UIUtils.btn_transparent2(eq_btn)
 			var sid_val: int = sdata["id"]
 			eq_btn.pressed.connect(func():
 				skill_system.equip_skill(sid_val)
@@ -3122,7 +2758,7 @@ func _show_skill_tooltip(skill_id: int) -> void:
 	tip.name = "SkillTooltip"
 	tip.position = Vector2(360, 180)
 	tip.size = Vector2(280, 200)
-	_panel_style(tip, Color(0.05, 0.06, 0.12, 0.95))
+	UIUtils.panel_style(tip, Color(0.05, 0.06, 0.12, 0.95))
 
 	var title: Label = Label.new()
 	title.text = sdata.get("icon", "?") + " " + sdata.get("name", "???")
@@ -3207,7 +2843,7 @@ func _show_stats_panel() -> void:
 	panel.name = "StatsPanel"
 	panel.position = Vector2(140, 40)
 	panel.size = Vector2(600, 680)
-	_panel_style(panel, Color(0.08, 0.09, 0.15))
+	UIUtils.panel_style(panel, Color(0.08, 0.09, 0.15))
 
 	# 标题 + 分页按钮
 	var title: Label = Label.new()
@@ -3255,7 +2891,7 @@ func _show_stats_panel() -> void:
 	close.text = "✕"
 	close.position = Vector2(558, 8)
 	close.size = Vector2(30, 28)
-	_btn_style_mini(close, Color(0.3, 0.1, 0.1))
+	UIUtils.btn_style_mini(close, Color(0.3, 0.1, 0.1))
 	close.pressed.connect(panel.queue_free)
 	panel.add_child(close)
 
@@ -3272,7 +2908,7 @@ func _show_stats_panel() -> void:
 	exp_bar.size = Vector2(560, 14)
 	exp_bar.value = player_exp
 	exp_bar.max_value = player_exp_max
-	_bar_style(exp_bar, Color(0.15, 0.35, 0.6))
+	UIUtils.bar_style(exp_bar, Color(0.15, 0.35, 0.6))
 	panel.add_child(exp_bar)
 
 	var exp_lbl: Label = Label.new()
@@ -3303,7 +2939,7 @@ func _show_stats_panel() -> void:
 	reset_btn.text = "洗点"
 	reset_btn.position = Vector2(480, free_sec_y + 2)
 	reset_btn.size = Vector2(60, 22)
-	_btn_style_mini(reset_btn, Color(0.3, 0.12, 0.12))
+	UIUtils.btn_style_mini(reset_btn, Color(0.3, 0.12, 0.12))
 	reset_btn.add_theme_color_override("font_color", Color(1.0, 0.6, 0.6))
 	reset_btn.pressed.connect(_show_reset_confirm)
 	panel.add_child(reset_btn)
@@ -3434,7 +3070,7 @@ func _show_stats_panel() -> void:
 		btn.position = Vector2(rx + row_w - 40, ry + 8)
 		btn.size = Vector2(28, 24)
 		btn.add_theme_font_size_override("font_size", 10)
-		_btn_style_mini(btn, Color(0.15, 0.22, 0.38))
+		UIUtils.btn_style_mini(btn, Color(0.15, 0.22, 0.38))
 		var desc: String = st["desc"]
 		btn.pressed.connect(func(): _show_stat_tooltip(st["name"], desc))
 		panel.add_child(btn)
@@ -3463,7 +3099,7 @@ func _show_stat_tooltip(stat_name: String, desc: String) -> void:
 	tip.name = "StatTooltip"
 	tip.position = Vector2(360, 280)
 	tip.size = Vector2(320, 120)
-	_panel_style(tip, Color(0.05, 0.06, 0.12, 0.95))
+	UIUtils.panel_style(tip, Color(0.05, 0.06, 0.12, 0.95))
 
 	var title: Label = Label.new()
 	title.text = stat_name
@@ -3489,61 +3125,3 @@ func _show_stat_tooltip(stat_name: String, desc: String) -> void:
 	)
 
 	add_child(tip)
-
-
-## ============ 样式工具 ============
-func _panel_style(node: Panel, clr: Color) -> void:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = clr
-	sb.border_width_left = 1; sb.border_width_right = 1
-	sb.border_width_top = 1; sb.border_width_bottom = 1
-	sb.border_color = Color(0.35, 0.35, 0.45, 0.6)
-	node.add_theme_stylebox_override("panel", sb)
-
-func _bar_style(node: ProgressBar, clr: Color) -> void:
-	var bg := StyleBoxFlat.new()
-	bg.bg_color = clr.darkened(0.3)
-	bg.border_width_left = 1; bg.border_width_right = 1
-	bg.border_width_top = 1; bg.border_width_bottom = 1
-	bg.border_color = Color(0.35, 0.35, 0.45)
-	node.add_theme_stylebox_override("background", bg)
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = clr
-	node.add_theme_stylebox_override("fill", fill)
-
-func _btn_style_mini(btn: Button, clr: Color) -> void:
-	var n: StyleBoxFlat = StyleBoxFlat.new()
-	n.bg_color = clr
-	n.border_width_left = 1; n.border_width_right = 1
-	n.border_width_top = 1; n.border_width_bottom = 1
-	n.border_color = clr.lightened(0.3)
-	n.set_corner_radius_all(3)
-	btn.add_theme_stylebox_override("normal", n)
-	btn.add_theme_color_override("font_color", Color.WHITE)
-	btn.flat = true
-
-## 透明按钮（hover 微弱高亮）
-func _btn_transparent2(btn: Button) -> void:
-	var normal: StyleBoxFlat = StyleBoxFlat.new()
-	normal.bg_color = Color(1, 1, 1, 0)
-	var hover: StyleBoxFlat = StyleBoxFlat.new()
-	hover.bg_color = Color(1, 1, 1, 0.06)
-	btn.add_theme_stylebox_override("normal", normal)
-	btn.add_theme_stylebox_override("hover", hover)
-	btn.add_theme_stylebox_override("pressed", normal)
-
-func _btn_style(btn: Button, clr: Color) -> void:
-	var n: StyleBoxFlat = StyleBoxFlat.new()
-	n.bg_color = clr
-	n.border_width_left = 2; n.border_width_right = 2
-	n.border_width_top = 2; n.border_width_bottom = 2
-	n.border_color = Color(0.5, 0.5, 0.6, 0.7)
-	n.set_corner_radius_all(6)
-	btn.add_theme_stylebox_override("normal", n)
-	var h: StyleBoxFlat = n.duplicate() as StyleBoxFlat
-	h.bg_color = clr.lightened(0.15)
-	btn.add_theme_stylebox_override("hover", h)
-	var p: StyleBoxFlat = n.duplicate() as StyleBoxFlat
-	p.bg_color = clr.darkened(0.15)
-	btn.add_theme_stylebox_override("pressed", p)
-	btn.add_theme_color_override("font_color", Color.WHITE)

@@ -104,8 +104,9 @@ func from_dict(data: Dictionary) -> void:
 		slots.append(null)
 	max_slots = data.get("max_slots", 2)
 	cooldowns.clear()
-	for k, v in data.get("cooldowns", {}):
-		cooldowns[int(k)] = v
+	var cd_data: Dictionary = data.get("cooldowns", {})
+	for k in cd_data:
+		cooldowns[int(k)] = cd_data[k]
 
 
 func select_next_skill() -> int:

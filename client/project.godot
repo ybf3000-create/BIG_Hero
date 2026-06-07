@@ -10,7 +10,7 @@ config_version=5
 
 [application]
 
-config/name="大勇者"
+config/name="BIG_HREO"
 run/main_scene="res://scenes/select_slot.tscn"
 config/features=PackedStringArray("4.4", "Mobile")
 config/icon="res://icon.svg"
