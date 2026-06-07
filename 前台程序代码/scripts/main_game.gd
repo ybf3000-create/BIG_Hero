@@ -67,12 +67,16 @@ const InventoryCls = preload("res://scripts/inventory.gd")
 const EquipmentCls = preload("res://scripts/equipment.gd")
 const ItemDBRef = preload("res://scripts/item_db.gd")
 const EquipGenCls = preload("res://scripts/equip_gen.gd")
+const SkillDataRef = preload("res://scripts/skill_data.gd")
+const SkillCls = preload("res://scripts/skill_system.gd")
 
 # 子系统
 var dice: RefCounted
 var executor: RefCounted
 var inventory: RefCounted
-var equipment: RefCounted
+var skill_system: RefCounted
+
+# 技能槽位（内嵌管理，6槽）
 
 # 生成装备实例列表（每件唯一）
 var equip_instances: Array[Dictionary] = []
@@ -120,6 +124,7 @@ func _ready() -> void:
 	executor = GridExecutorCls.new()
 	inventory = InventoryCls.new()
 	equipment = EquipmentCls.new()
+	skill_system = SkillCls.new()
 
 	# 从选择界面传来的存档数据
 	if has_meta("save_slot") and has_meta("save_data"):
@@ -541,6 +546,19 @@ func _build_bottom_bar() -> void:
 	gem_btn.pressed.connect(_on_test_generate_gem)
 	add_child(gem_btn)
 
+	# -- 自由属性点测试按钮 --
+	var freept_btn := Button.new()
+	freept_btn.text = "⭐ +自由点"
+	freept_btn.position = Vector2(332, 314)
+	freept_btn.size = Vector2(100, 28)
+	_btn_style_mini(freept_btn, Color(0.3, 0.25, 0.1))
+	freept_btn.pressed.connect(func():
+		player_free_points += 1
+		_show_float_text("+1 自由属性点 (共" + str(player_free_points) + "点)", Color(1.0, 0.85, 0.2))
+		_refresh_all_stats_panels()
+	)
+	add_child(freept_btn)
+
 	# -- 彩票测试按钮 --
 	var lottery_btn := Button.new()
 	lottery_btn.text = "🎰 生成彩票"
@@ -632,6 +650,9 @@ func _load_from_save_data(data: Dictionary) -> void:
 	equip_instances.clear()
 	for item in data.get("equip_instances", []):
 		equip_instances.append(EquipGenCls.deserialize(item as Dictionary))
+	_skill_update_max(player_level)
+	skill_system.from_dict(data.get("skill_system", {}))
+	skill_system.update_max_slots(player_level)
 	# _refresh_poker_slots() 延迟到 _build_top_bar() 之后
 
 
@@ -659,6 +680,7 @@ func _build_save_data() -> Dictionary:
 		"inventory": inventory.to_dict(),
 		"equipment": equipment.to_dict(),
 		"equip_instances": equip_instances,
+		"skill_system": skill_system.to_dict(),
 	}
 
 
@@ -2827,6 +2849,353 @@ func _apply_deity_buff(buff_data: Dictionary) -> void:
 	_refresh_all_stats_panels()
 
 
+## ============ 技能面板 ============
+func _build_skill_tab(panel: Panel) -> void:
+	var sec_y: float = 50.0
+
+	# 装备技能槽位
+	var eq_title: Label = Label.new()
+	eq_title.text = "装备技能槽位"
+	eq_title.add_theme_font_size_override("font_size", 13)
+	eq_title.add_theme_color_override("font_color", Color(0.7, 0.85, 1.0))
+	eq_title.position = Vector2(16, sec_y)
+	panel.add_child(eq_title)
+
+	# ? 说明按钮
+	var help_btn: Button = Button.new()
+	help_btn.text = "?"
+	help_btn.position = Vector2(130, sec_y)
+	help_btn.size = Vector2(22, 22)
+	help_btn.add_theme_font_size_override("font_size", 11)
+	_btn_style_mini(help_btn, Color(0.15, 0.22, 0.38))
+	help_btn.pressed.connect(func():
+		_show_stat_tooltip("优先级规则", "点击数字 ①/②/③ 切换优先级\n右键已装备技能可卸下\n\nCD同时归零时：①>②>③\n同级按槽位从左到右释放\n全部CD中→普攻\n\n槽位解锁: Lv.1=2 Lv.5=3 Lv.15=4 Lv.35=5 Lv.45=6")
+	)
+	panel.add_child(help_btn)
+
+	var slot_w: float = 280.0
+	var slot_h: float = 64.0
+	var gap_x: float = 12.0
+	var gap_y: float = 8.0
+	var cols: int = 2
+	var max_slots: int = skill_system.get_slot_count()
+	var unlocked: int = skill_system.get_unlocked_slots()
+
+	for i in range(max_slots):
+		var col: int = i % cols
+		var row: int = i / cols
+		var sx: float = 16.0 + col * (slot_w + gap_x)
+		var sy: float = sec_y + 30.0 + row * (slot_h + gap_y)
+		var sid: Variant = skill_system.get_slot_skill_id(i)
+		var is_locked: bool = (i >= unlocked)
+
+		if is_locked:
+			# 锁定槽
+			var lock_bg: Panel = Panel.new()
+			lock_bg.position = Vector2(sx, sy)
+			lock_bg.size = Vector2(slot_w, slot_h)
+			var lock_st := StyleBoxFlat.new()
+			lock_st.bg_color = Color(0.08, 0.09, 0.14)
+			lock_st.border_width_all = 1
+			lock_st.border_color = Color(0.2, 0.2, 0.3)
+			lock_bg.add_theme_stylebox_override("panel", lock_st)
+			panel.add_child(lock_bg)
+			var lock_lbl: Label = Label.new()
+			var unlock_lv: int = [0, 0, 0, 5, 15, 35, 45][i+1] if i+1 < 7 else 45
+			lock_lbl.text = "🔒 Lv." + str(unlock_lv)
+			lock_lbl.add_theme_font_size_override("font_size", 12)
+			lock_lbl.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5))
+			lock_lbl.position = Vector2(sx + 100, sy + 22)
+			panel.add_child(lock_lbl)
+		elif sid != null:
+			# 已装备技能
+			var sdata: Dictionary = SkillDataRef.get_skill(sid)
+			var priority: int = skill_system.get_slot_priority(i)
+			var prio_icons: String = ["①", "②", "③"][priority-1]
+			var school_clr: Color = _skill_school_color(sdata.get("school", 0))
+
+			var skill_bg: Panel = Panel.new()
+			skill_bg.position = Vector2(sx, sy)
+			skill_bg.size = Vector2(slot_w, slot_h)
+			var sb := StyleBoxFlat.new()
+			sb.bg_color = school_clr.darkened(0.7)
+			sb.border_width_all = 1
+			sb.border_color = school_clr
+			skill_bg.add_theme_stylebox_override("panel", sb)
+			panel.add_child(skill_bg)
+
+			var icon_lbl: Label = Label.new()
+			icon_lbl.text = sdata.get("icon", "?")
+			icon_lbl.add_theme_font_size_override("font_size", 22)
+			icon_lbl.position = Vector2(sx + 8, sy + 10)
+			panel.add_child(icon_lbl)
+
+			var name_lbl: Label = Label.new()
+			name_lbl.text = sdata.get("name", "??")
+			name_lbl.add_theme_font_size_override("font_size", 14)
+			name_lbl.add_theme_color_override("font_color", Color(1, 1, 1))
+			name_lbl.position = Vector2(sx + 52, sy + 12)
+			panel.add_child(name_lbl)
+
+			var cd_lbl: Label = Label.new()
+			cd_lbl.text = "CD " + str(sdata.get("cd", 0)) + "s"
+			cd_lbl.add_theme_font_size_override("font_size", 11)
+			cd_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
+			cd_lbl.position = Vector2(sx + 52, sy + 32)
+			panel.add_child(cd_lbl)
+
+			# 优先级按钮
+			var prio_btn: Button = Button.new()
+			prio_btn.text = prio_icons
+			prio_btn.position = Vector2(sx + slot_w - 46, sy + 6)
+			prio_btn.size = Vector2(36, 22)
+			prio_btn.add_theme_font_size_override("font_size", 12)
+			var prio_clr: Color = [Color(0.6, 0.6, 0.6), Color(0.3, 1.0, 0.6), Color(0.3, 0.6, 1.0)][priority-1]
+			_btn_style_mini(prio_btn, Color(0.12, 0.14, 0.22))
+			prio_btn.add_theme_color_override("font_color", prio_clr)
+			var si: int = i
+			prio_btn.pressed.connect(func():
+				skill_system.toggle_priority(si)
+				panel.queue_free()
+				_show_stats_panel()
+			)
+			panel.add_child(prio_btn)
+
+			# 点击查看详情
+			var detail_btn: Button = Button.new()
+			detail_btn.flat = true
+			detail_btn.position = Vector2(sx, sy)
+			detail_btn.size = Vector2(slot_w - 50, slot_h)
+			_btn_transparent2(detail_btn)
+			var sid_cap: int = sid
+			detail_btn.gui_input.connect(func(ev: InputEvent):
+				if ev is InputEventMouseButton and ev.pressed:
+					if ev.button_index == MOUSE_BUTTON_RIGHT:
+						skill_system.unequip_skill(si)
+						panel.queue_free()
+						_show_stats_panel()
+					elif ev.button_index == MOUSE_BUTTON_LEFT:
+						_show_skill_tooltip(sid_cap)
+			)
+			panel.add_child(detail_btn)
+		else:
+			# 空槽
+			var empty_bg: Panel = Panel.new()
+			empty_bg.position = Vector2(sx, sy)
+			empty_bg.size = Vector2(slot_w, slot_h)
+			var es := StyleBoxFlat.new()
+			es.bg_color = Color(1,1,1,0)
+			es.border_width_all = 1
+			es.border_color = Color(0.25, 0.25, 0.35)
+			es.set_corner_radius_all(4)
+			empty_bg.add_theme_stylebox_override("panel", es)
+			panel.add_child(empty_bg)
+			var empty_lbl: Label = Label.new()
+			empty_lbl.text = "空槽位 " + str(i+1) + "/" + str(max_slots)
+			empty_lbl.add_theme_font_size_override("font_size", 12)
+			empty_lbl.add_theme_color_override("font_color", Color(0.35, 0.35, 0.4))
+			empty_lbl.position = Vector2(sx + 100, sy + 22)
+			panel.add_child(empty_lbl)
+
+	# 分隔
+	var pool_y: float = sec_y + 30.0 + ((max_slots + 1) / cols) * (slot_h + gap_y) + 8
+	var sep: ColorRect = ColorRect.new()
+	sep.position = Vector2(16, pool_y)
+	sep.size = Vector2(568, 1)
+	sep.color = Color(0.2, 0.2, 0.3)
+	panel.add_child(sep)
+
+	# 技能池标题
+	pool_y += 10
+	var pool_title: Label = Label.new()
+	pool_title.text = "技能池"
+	pool_title.add_theme_font_size_override("font_size", 13)
+	pool_title.add_theme_color_override("font_color", Color(0.7, 0.85, 1.0))
+	pool_title.position = Vector2(16, pool_y)
+	panel.add_child(pool_title)
+
+	# 流派筛选按钮
+	pool_y += 22
+	var school_names: Array[String] = ["全部", "爆发", "持续", "控制", "生存", "Dot", "贯穿"]
+	var school_colors: Array[Color] = [
+		Color(0.5,0.5,0.5), Color(0.8,0.3,0.3), Color(0.3,0.7,0.9),
+		Color(0.3,0.6,1.0), Color(0.2,0.8,0.4), Color(0.7,0.3,0.9), Color(1.0,0.6,0.2)
+	]
+	for qi in range(school_names.size()):
+		var qb: Button = Button.new()
+		qb.text = school_names[qi]
+		qb.position = Vector2(16 + qi * 48, pool_y)
+		qb.size = Vector2(44, 22)
+		qb.add_theme_font_size_override("font_size", 11)
+		var selected: bool = (_skill_filter == qi - 1 and qi > 0) or (qi == 0 and _skill_filter < 0)
+		_btn_style_mini(qb, school_colors[qi].darkened(0.5) if not selected else school_colors[qi].lightened(0.2))
+		qb.add_theme_color_override("font_color", Color(1,1,1) if selected else school_colors[qi])
+		qb.pressed.connect(func():
+			_skill_filter = qi - 1 if qi > 0 else -1
+			panel.queue_free()
+			_show_stats_panel()
+		)
+		panel.add_child(qb)
+
+	# 技能网格
+	var pcol: int = 4
+	var grid_y: float = pool_y + 30.0
+	var icon_s: float = 140.0
+	var i_gap: float = 8.0
+
+	# 筛选可用技能
+	var all_skills: Array[Dictionary] = []
+	for s in SkillDataRef.SKILLS:
+		if _skill_filter >= 0 and s["school"] != _skill_filter:
+			continue
+		all_skills.append(s)
+
+	for si in range(all_skills.size()):
+		var sdata: Dictionary = all_skills[si]
+		var col_i: int = si % pcol
+		var row_i: int = si / pcol
+		var cx: float = 16.0 + col_i * (icon_s + i_gap)
+		var cy: float = grid_y + row_i * 52.0
+		if cy > 660:
+			break
+
+		var equipped: bool = false
+		for ei in range(unlocked):
+			var esid = skill_system.get_slot_skill_id(ei)
+			if esid == sdata["id"]:
+				equipped = true
+				break
+
+		var sc: Color = _skill_school_color(sdata.get("school", 0))
+		var p_style := StyleBoxFlat.new()
+		p_style.bg_color = sc.darkened(0.5) if not equipped else sc.darkened(0.3)
+		p_style.border_width_all = 1
+		p_style.border_color = sc
+		var pool_bg: Panel = Panel.new()
+		pool_bg.position = Vector2(cx, cy)
+		pool_bg.size = Vector2(icon_s, 48)
+		pool_bg.add_theme_stylebox_override("panel", p_style)
+		panel.add_child(pool_bg)
+
+		var pool_icon: Label = Label.new()
+		pool_icon.text = sdata.get("icon", "?")
+		pool_icon.add_theme_font_size_override("font_size", 18)
+		pool_icon.position = Vector2(cx + 6, cy + 6)
+		panel.add_child(pool_icon)
+
+		var pool_name: Label = Label.new()
+		pool_name.text = sdata.get("name", "??")
+		pool_name.add_theme_font_size_override("font_size", 12)
+		pool_name.add_theme_color_override("font_color", Color(1,1,1))
+		pool_name.position = Vector2(cx + 34, cy + 6)
+		panel.add_child(pool_name)
+
+		var pool_info: Label = Label.new()
+		pool_info.text = ("已装备" if equipped else "CD" + str(sdata.get("cd",0)) + "s") + " · " + SkillDataRef.school_name(sdata.get("school",0))
+		pool_info.add_theme_font_size_override("font_size", 10)
+		pool_info.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
+		pool_info.position = Vector2(cx + 34, cy + 24)
+		panel.add_child(pool_info)
+
+		# 点击装备
+		if not equipped:
+			var eq_btn: Button = Button.new()
+			eq_btn.flat = true
+			eq_btn.position = Vector2(cx, cy)
+			eq_btn.size = Vector2(icon_s, 48)
+			_btn_transparent2(eq_btn)
+			var sid_val: int = sdata["id"]
+			eq_btn.pressed.connect(func():
+				skill_system.equip_skill(sid_val)
+				panel.queue_free()
+				_show_stats_panel()
+			)
+			panel.add_child(eq_btn)
+
+
+## 技能提示
+func _show_skill_tooltip(skill_id: int) -> void:
+	var sdata: Dictionary = SkillDataRef.get_skill(skill_id)
+	if sdata.is_empty():
+		return
+	var tip: Panel = Panel.new()
+	tip.name = "SkillTooltip"
+	tip.position = Vector2(360, 180)
+	tip.size = Vector2(280, 200)
+	_panel_style(tip, Color(0.05, 0.06, 0.12, 0.95))
+
+	var title: Label = Label.new()
+	title.text = sdata.get("icon", "?") + " " + sdata.get("name", "???")
+	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
+	title.position = Vector2(16, 10)
+	tip.add_child(title)
+
+	var school_lbl: Label = Label.new()
+	school_lbl.text = SkillDataRef.school_name(sdata.get("school", 0)) + "  |  CD " + str(sdata.get("cd", 0)) + "s"
+	school_lbl.add_theme_font_size_override("font_size", 11)
+	school_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
+	school_lbl.position = Vector2(16, 32)
+	tip.add_child(school_lbl)
+
+	var desc: String = sdata.get("desc", "")
+	if sdata.has("dmg_pct"):
+		desc += "\n伤害倍率: " + str(sdata["dmg_pct"]) + "%"
+	if sdata.has("control"):
+		var cname: String = SkillDataRef.control_name(sdata.get("control", -1))
+		if not cname.is_empty():
+			desc += "\n控制: " + cname + " " + str(sdata.get("control_dur", 0)) + "秒"
+	if sdata.has("dot_pct"):
+		desc += "\nDot: " + str(sdata["dot_pct"]) + "%/次 ×" + str(sdata.get("dot_dur", 0)) + "秒"
+	if sdata.has("shield_pct"):
+		desc += "\n护盾: " + str(sdata["shield_pct"]) + "% " + sdata.get("shield_stat", "def")
+	if sdata.has("heal_pct"):
+		desc += "\n治疗: " + str(sdata["heal_pct"]) + "% " + sdata.get("heal_stat", "atk")
+
+	var body: Label = Label.new()
+	body.text = desc
+	body.add_theme_font_size_override("font_size", 12)
+	body.add_theme_color_override("font_color", Color(0.8, 0.8, 0.85))
+	body.position = Vector2(16, 54)
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD
+	body.size = Vector2(252, 136)
+	tip.add_child(body)
+
+	var t := get_tree().create_timer(4.0)
+	t.timeout.connect(func():
+		if is_instance_valid(tip):
+			tip.queue_free()
+	)
+	add_child(tip)
+
+
+## 技能流派颜色
+func _skill_school_color(school: int) -> Color:
+	match school:
+		0: return Color(0.8, 0.3, 0.2)   # 爆发流·红
+		1: return Color(0.3, 0.7, 0.9)   # 持续流·蓝
+		2: return Color(0.3, 0.6, 1.0)   # 控制流·靛蓝
+		3: return Color(0.2, 0.8, 0.4)   # 生存流·绿
+		4: return Color(0.7, 0.3, 0.9)   # Dot流·紫
+		5: return Color(1.0, 0.6, 0.2)   # 贯穿流·橙
+	return Color(0.5, 0.5, 0.5)
+
+
+var _skill_filter: int = -1  # -1=全部, 0~5=流派
+
+
+## ============ 面板内部刷新（不触发 toggle） ============
+func _refresh_stats_panel() -> void:
+	var old: Node = get_node_or_null("StatsPanel")
+	if old:
+		old.queue_free()
+	# 直接重建（用 call_deferred 等当前帧释放完）
+	call_deferred("_show_stats_panel")
+
+
+## ============ 属性面板 ============## ============ 角色属性/技能面板（分页） ============
+var _stats_tab: String = "stats"  # "stats" | "skill"
+
 func _show_stats_panel() -> void:
 	# 移除旧面板
 	var old: Node = get_node_or_null("StatsPanel")
@@ -2840,13 +3209,62 @@ func _show_stats_panel() -> void:
 	panel.size = Vector2(600, 680)
 	_panel_style(panel, Color(0.08, 0.09, 0.15))
 
-	# 标题
+	# 标题 + 分页按钮
 	var title: Label = Label.new()
 	title.text = "📋 " + player_name + "  Lv." + str(player_level)
 	title.add_theme_font_size_override("font_size", 22)
 	title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
 	title.position = Vector2(20, 12)
 	panel.add_child(title)
+
+	# 分页按钮
+	var tab_defs := [
+		{ "id": "stats", "text": "属性", "x": 400 },
+		{ "id": "skill", "text": "技能", "x": 480 },
+	]
+	for td in tab_defs:
+		var tb: Button = Button.new()
+		tb.text = td["text"]
+		tb.position = Vector2(td["x"], 8)
+		tb.size = Vector2(70, 28)
+		tb.add_theme_font_size_override("font_size", 14)
+		var is_active: bool = (_stats_tab == td["id"])
+		if is_active:
+			var ta := StyleBoxFlat.new()
+			ta.bg_color = Color(0.15, 0.18, 0.28)
+			ta.border_width_bottom = 2
+			ta.border_color = Color(0.3, 0.6, 1.0)
+			tb.add_theme_stylebox_override("normal", ta)
+			tb.add_theme_color_override("font_color", Color(1,1,1))
+		else:
+			var ta2 := StyleBoxFlat.new()
+			ta2.bg_color = Color(0.08, 0.09, 0.15)
+			tb.add_theme_stylebox_override("normal", ta2)
+			tb.add_theme_color_override("font_color", Color(0.4, 0.45, 0.5))
+		tb.flat = true
+		var tid: String = td["id"]
+		tb.pressed.connect(func():
+			if _stats_tab == tid:
+				return
+			_stats_tab = tid
+			_refresh_stats_panel()
+		)
+		panel.add_child(tb)
+
+	var close: Button = Button.new()
+	close.text = "✕"
+	close.position = Vector2(558, 8)
+	close.size = Vector2(30, 28)
+	_btn_style_mini(close, Color(0.3, 0.1, 0.1))
+	close.pressed.connect(panel.queue_free)
+	panel.add_child(close)
+
+	if _stats_tab == "skill":
+		_build_skill_tab(panel)
+		add_child(panel)
+		return
+
+	# ========== 属性面板内容 ==========
 
 	# 经验条
 	var exp_bar: ProgressBar = ProgressBar.new()
@@ -3031,15 +3449,6 @@ func _show_stats_panel() -> void:
 	footer.add_theme_color_override("font_color", Color(0.5, 0.55, 0.6))
 	footer.position = Vector2(20, sy)
 	panel.add_child(footer)
-
-	# 关闭
-	var close: Button = Button.new()
-	close.text = "✕"
-	close.position = Vector2(558, 8)
-	close.size = Vector2(30, 28)
-	_btn_style_mini(close, Color(0.3, 0.1, 0.1))
-	close.pressed.connect(panel.queue_free)
-	panel.add_child(close)
 
 	add_child(panel)
 
