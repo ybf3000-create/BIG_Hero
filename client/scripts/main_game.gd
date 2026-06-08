@@ -1303,7 +1303,7 @@ func _build_inventory_panel() -> void:
 
 	var stat_btn: Button = Button.new()
 	stat_btn.text = "?"
-	stat_btn.position = Vector2(70, 8)
+	stat_btn.position = Vector2(70, 4)
 	stat_btn.size = Vector2(26, 22)
 	UIUtils.btn_style_mini(stat_btn, Color(0.15, 0.22, 0.38))
 	stat_btn.pressed.connect(_show_stats_panel)
@@ -1507,8 +1507,9 @@ func _rebuild_filters(item_area: Panel, main_panel: Panel) -> void:
 		var qb: Button = Button.new()
 		qb.text = qlabels[qi]
 		qb.position = Vector2(4 + qi * 52, 4)
-		qb.size = Vector2(46, 22)
+		qb.size = Vector2(48, 22)
 		qb.add_theme_font_size_override("font_size", 12)
+		qb.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		var qv: int = qi - 1
 		var selected: bool = (qv == -1 and _inv_filter_quality.is_empty()) or _inv_filter_quality.has(qv)
 		var clr: Color = qclrvals[qi]
@@ -1544,9 +1545,10 @@ func _rebuild_filters(item_area: Panel, main_panel: Panel) -> void:
 		for si in range(slabels.size()):
 			var sb: Button = Button.new()
 			sb.text = slabels[si]
-			sb.position = Vector2(4 + si * 46, 32)
-			sb.size = Vector2(42, 20)
+			sb.position = Vector2(4 + si * 52, 32)
+			sb.size = Vector2(48, 20)
 			sb.add_theme_font_size_override("font_size", 12)
+			sb.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			var sv: int = si - 1
 			var ssel: bool = (sv == -1 and _inv_filter_slot.is_empty()) or _inv_filter_slot.has(sv)
 			UIUtils.btn_style_mini(sb, Color(0.15, 0.18, 0.35) if not ssel else Color(0.25, 0.40, 0.60))
