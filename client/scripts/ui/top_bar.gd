@@ -304,7 +304,7 @@ func refresh_poker_slots() -> void:
 		var val_lbl: Label = main_game.get_node_or_null("TopBar/PokerVal" + str(i)) as Label
 		var suit_lbl: Label = main_game.get_node_or_null("TopBar/PokerSuit" + str(i)) as Label
 		if i < main_game.poker_records.size():
-			var rec := main_game.poker_records[i]
+			var rec = main_game.poker_records[i] as Dictionary
 			if val_lbl:
 				val_lbl.text = str(rec["value"])
 			if suit_lbl:
@@ -357,7 +357,7 @@ func check_poker_hand() -> void:
 
 	var result_lbl: Label = main_game.get_node_or_null("TopBar/PokerResultLabel") as Label
 	if multiplier > 0:
-		var bonus := main_game.player_level * (randi() % 41 + 10) * multiplier
+		var bonus: int = main_game.player_level * (randi() % 41 + 10) * multiplier
 		main_game.player_gold += bonus
 		if result_lbl:
 			result_lbl.text = hand_name + "！+" + str(bonus) + "金 (×" + str(multiplier) + ")"
