@@ -55,8 +55,9 @@ var poker_records: Array[Dictionary] = []
 var auto_play_enabled: bool = false
 var _current_slot: int = -1  # 当前存档槽位
 
-const VISIBLE_BEFORE: int = 2
-const VISIBLE_AFTER: int  = 4
+const VISIBLE_BEFORE: int = 3
+const VISIBLE_AFTER: int  = 5
+const CURRENT_TILE_SLOT: int = VISIBLE_BEFORE
 
 const GridTileCls = preload("res://scripts/grid_tile.gd")
 const DiceRollerCls = preload("res://scripts/dice_roller.gd")
@@ -65,6 +66,7 @@ const InventoryCls = preload("res://scripts/inventory.gd")
 const EquipmentCls = preload("res://scripts/equipment.gd")
 const ItemDBRef = preload("res://scripts/item_db.gd")
 const EquipGenCls = preload("res://scripts/equip_gen.gd")
+const EquipData = preload("res://scripts/equip_data.gd")
 const SkillDataRef = preload("res://scripts/skill_data.gd")
 const SkillCls = preload("res://scripts/skill_system.gd")
 const UIUtilsRef = preload("res://scripts/ui/ui_utils.gd")
@@ -104,15 +106,16 @@ var _move_timer: float = 0.0
 var _bounce_offset: float = 0.0     # 主角跳跃偏移
 var _scroll_offset: float = 0.0     # 地块左滑偏移
 
-const STEP_PAUSE: float = 0.3       # 每步停顿
-const STEP_SLIDE: float = 0.25      # 滑动时长
+const STEP_PAUSE: float = 0.21      # 每步停顿（原 0.3，缩短30%）
+const STEP_SLIDE: float = 0.175     # 滑动时长（原 0.25，缩短30%）
 const STEP_TOTAL: float = STEP_PAUSE + STEP_SLIDE  # 单步总时长
 
 # 平行四边形地块尺寸（顶边宽 × 高，斜边由 GridTile.SHEAR 控制）
 const TILE_W: float = 160.0       # 上下边水平宽度
 const TILE_H: float = 90.0        # 平行四边形高度（标签内置）
 const TILE_SHEAR: float = 45.0    # 斜边偏移（与 GridTile.SHEAR 一致）
-const TILE_COUNT: int = 7
+const TILE_COUNT: int = VISIBLE_BEFORE + VISIBLE_AFTER + 1
+const TILE_SLOT_NAMES: Array[String] = ["PrevGrid3", "PrevGrid2", "PrevGrid1", "CurrentGrid", "NextGrid1", "NextGrid2", "NextGrid3", "NextGrid4", "NextGrid5"]
 const EXPANSION_PROTECT_RADIUS: int = 3
 const EXPANSION_RESHUFFLE_ATTEMPTS: int = 80
 # TILE_Y 在 _build_map_area 中动态计算
@@ -174,7 +177,7 @@ func _build_map_area() -> void:
 	var total_span := TILE_COUNT * TILE_W
 	var start_x := (1280.0 - total_span) / 2.0
 	var tile_y: float = area.size.y - TILE_H - 12  # 靠下，留 12px 间距
-	var slot_names := ["PrevGrid2", "PrevGrid1", "CurrentGrid", "NextGrid1", "NextGrid2", "NextGrid3", "NextGrid4"]
+	var slot_names: Array[String] = TILE_SLOT_NAMES
 	var grid_tile_y: float = tile_y  # 主角定位用
 
 	for i in range(TILE_COUNT):
@@ -186,8 +189,8 @@ func _build_map_area() -> void:
 		tile.set_label_positions(0, 0)
 		area.add_child(tile)
 
-	# -- 主角图像（PNG 自带透明背景） --
-	var hero_tex := load("res://assets/主角.png")
+	# -- 主角图像（PNG 自带透明背景，直接读取源图避免导入压缩/透明异常） --
+	var hero_tex: Texture2D = _load_hero_texture("res://assets/hreo.png")
 	if hero_tex:
 		var hero := TextureRect.new()
 		hero.name = "HeroOnMap"
@@ -196,14 +199,14 @@ func _build_map_area() -> void:
 		hero.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		hero.size = Vector2(130, 130)
 		area.add_child(hero)
-		_position_hero_on_tile(hero, 3, area)  # 初始在当前格
+		_position_hero_on_tile(hero, CURRENT_TILE_SLOT, area)  # 初始在当前格
 	else:
 		var fallback := Label.new()
 		fallback.name = "HeroFallback"
 		fallback.text = "🚶"
 		fallback.add_theme_font_size_override("font_size", 64)
 		# 居中当前格
-		var fcx: float = start_x + 3 * TILE_W + TILE_W / 2.0 + TILE_SHEAR / 2.0
+		var fcx: float = start_x + CURRENT_TILE_SLOT * TILE_W + TILE_W / 2.0 + TILE_SHEAR / 2.0
 		fallback.position = Vector2(fcx - 32, grid_tile_y - 50)
 		area.add_child(fallback)
 
@@ -240,6 +243,155 @@ func _build_map_area() -> void:
 	area.add_child(auto_check)
 
 	add_child(area)
+
+
+func _load_hero_texture(res_path: String) -> Texture2D:
+	var image: Image = Image.load_from_file(res_path)
+	if image != null and not image.is_empty():
+		return ImageTexture.create_from_image(image)
+	var fallback: Resource = load(res_path)
+	return fallback as Texture2D
+
+
+## 调试面板开关
+func _toggle_debug_panel() -> void:
+	var existing := get_node_or_null("DebugOverlay")
+	if existing:
+		existing.queue_free()
+		return
+	_build_debug_panel()
+
+
+## 构建调试面板（4列 × 最大5排）
+func _build_debug_panel() -> void:
+	const COLS: int = 4
+	const MAX_ROWS: int = 5
+	const BTN_W: float = 130.0
+	const BTN_H: float = 36.0
+	const GAP: float = 8.0
+	const MARGIN: float = 14.0
+	const TITLE_H: float = 32.0
+	var panel_w: float = MARGIN * 2 + BTN_W * COLS + GAP * (COLS - 1)
+	var panel_h: float = TITLE_H + MARGIN + (BTN_H + GAP) * MAX_ROWS + MARGIN
+
+	# 遮罩（点击关闭）
+	var overlay := ColorRect.new()
+	overlay.name = "DebugOverlay"
+	overlay.color = Color(0, 0, 0, 0.45)
+	overlay.size = Vector2(1280, 720)
+	overlay.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and ev.pressed:
+			_toggle_debug_panel()
+	)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	# 面板
+	var panel := Panel.new()
+	panel.name = "DebugPanel"
+	panel.position = Vector2((1280.0 - panel_w) / 2.0, (720.0 - panel_h) / 2.0)
+	panel.size = Vector2(panel_w, panel_h)
+	UIUtils.panel_style(panel, Color(0.10, 0.10, 0.18, 0.97))
+	overlay.add_child(panel)
+	add_child(overlay)
+
+	# 标题
+	var title := Label.new()
+	title.text = "🔧 调试面板"
+	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_color_override("font_color", Color(0.4, 0.7, 1.0))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.position = Vector2(0, 4)
+	title.size = Vector2(panel_w, TITLE_H)
+	panel.add_child(title)
+
+	# 关闭按钮（右上角）
+	var close_btn := Button.new()
+	close_btn.text = "✕"
+	close_btn.position = Vector2(panel_w - 32, 4)
+	close_btn.size = Vector2(26, 26)
+	UIUtils.btn_style_mini(close_btn, Color(0.4, 0.12, 0.12))
+	close_btn.pressed.connect(_toggle_debug_panel)
+	panel.add_child(close_btn)
+
+	# ---------- 按钮定义 ----------
+	var btn_defs: Array[Dictionary] = [
+		# 第1排：资源生成
+		{"text": "💎 生成宝石",  "clr": Color(0.38, 0.12, 0.38), "cb": _on_test_generate_gem},
+		{"text": "🔧 生成装备",  "clr": Color(0.22, 0.15, 0.38), "cb": _on_test_generate_equip},
+		{"text": "⭐ +自由点",   "clr": Color(0.30, 0.25, 0.10), "cb": _on_test_add_free_point},
+		{"text": "🎰 生成彩票",  "clr": Color(0.38, 0.08, 0.18), "cb": _on_test_generate_lottery},
+		# 第2排：战斗测试
+		{"text": "⚔ 普通战斗",   "clr": Color(0.15, 0.35, 0.15), "cb": func(): _on_test_battle("battle")},
+		{"text": "🗡 精英战斗",   "clr": Color(0.35, 0.20, 0.10), "cb": func(): _on_test_battle("elite")},
+		{"text": "👑 Boss战斗",   "clr": Color(0.35, 0.10, 0.10), "cb": func(): _on_test_battle("boss")},
+	]
+
+	for idx in range(btn_defs.size()):
+		var def: Dictionary = btn_defs[idx]
+		var row: int = idx / COLS
+		var col: int = idx % COLS
+		if row >= MAX_ROWS:
+			break
+		var bx: float = MARGIN + col * (BTN_W + GAP)
+		var by: float = TITLE_H + MARGIN + row * (BTN_H + GAP)
+		var btn := Button.new()
+		btn.text = def["text"]
+		btn.position = Vector2(bx, by)
+		btn.size = Vector2(BTN_W, BTN_H)
+		UIUtils.btn_style_mini(btn, def["clr"] as Color)
+		btn.add_theme_font_size_override("font_size", 13)
+		var cb: Callable = def["cb"] as Callable
+		if cb.is_valid():
+			btn.pressed.connect(cb)
+		panel.add_child(btn)
+
+
+## -- 测试战斗触发 --
+func _on_test_battle(battle_kind: String) -> void:
+	var ctx := {
+		"player_level": player_level,
+		"player_gold": player_gold,
+		"player_revive": player_revive,
+		"player_hp": player_hp,
+		"player_max_hp": player_max_hp,
+		"player_name": player_name,
+		"boss_tier": player_boss_tier,
+		"boss_index": player_boss_index,
+		"equip_instances": equip_instances,
+		"equipment": equipment,
+		"player_state": _build_player_battle_state(),
+	}
+	var result: Dictionary
+	match battle_kind:
+		"elite":
+			result = GridExecutorCls._exec_elite(ctx)
+		"boss":
+			result = GridExecutorCls._exec_boss(ctx)
+		_:
+			result = GridExecutorCls._exec_battle(ctx)
+
+	player_gold = int(ctx.get("player_gold", player_gold))
+	player_revive = int(ctx.get("player_revive", player_revive))
+	player_hp = clampi(int(ctx.get("player_hp", player_hp)), 0, player_max_hp)
+
+	var edata: Dictionary = result.get("data", {})
+	if edata.has("battle_result"):
+		_apply_battle_result(edata)
+	var msg: String = edata.get("message", battle_kind + " 战斗完成")
+	var clr: Color = Color(1.0, 0.85, 0.3)
+	if edata.get("force_home", false):
+		clr = Color(1.0, 0.4, 0.4)
+	_show_float_text(msg, clr)
+
+	top_bar.refresh()
+	top_bar.refresh_compact_stats()
+	_auto_save()
+
+
+func _on_test_add_free_point() -> void:
+	player_free_points += 1
+	_show_float_text("+1 自由属性点 (共" + str(player_free_points) + "点)", Color(1.0, 0.85, 0.2))
+	_refresh_all_stats_panels()
 
 
 ## 将主角图像定位到指定菱形格子正上方
@@ -304,46 +456,15 @@ func _build_bottom_bar() -> void:
 		btn.add_theme_font_size_override("font_size", 16)
 		bar.add_child(btn)
 
-	# -- 宝石测试按钮 --
-	var gem_btn := Button.new()
-	gem_btn.text = "💎 生成宝石"
-	gem_btn.position = Vector2(8, 314)
-	gem_btn.size = Vector2(100, 28)
-	UIUtils.btn_style_mini(gem_btn, Color(0.38, 0.12, 0.38))
-	gem_btn.pressed.connect(_on_test_generate_gem)
-	add_child(gem_btn)
-
-	# -- 自由属性点测试按钮 --
-	var freept_btn := Button.new()
-	freept_btn.text = "⭐ +自由点"
-	freept_btn.position = Vector2(332, 314)
-	freept_btn.size = Vector2(100, 28)
-	UIUtils.btn_style_mini(freept_btn, Color(0.3, 0.25, 0.1))
-	freept_btn.pressed.connect(func():
-		player_free_points += 1
-		_show_float_text("+1 自由属性点 (共" + str(player_free_points) + "点)", Color(1.0, 0.85, 0.2))
-		_refresh_all_stats_panels()
-	)
-	add_child(freept_btn)
-
-	# -- 彩票测试按钮 --
-	var lottery_btn := Button.new()
-	lottery_btn.text = "🎰 生成彩票"
-	lottery_btn.position = Vector2(224, 314)
-	lottery_btn.size = Vector2(100, 28)
-	UIUtils.btn_style_mini(lottery_btn, Color(0.38, 0.08, 0.18))
-	lottery_btn.pressed.connect(_on_test_generate_lottery)
-	add_child(lottery_btn)
-
-	# -- 装备测试按钮 --
-	var test_btn := Button.new()
-	test_btn.name = "TestEquipBtn"
-	test_btn.text = "🔧 生成装备"
-	test_btn.position = Vector2(116, 314)
-	test_btn.size = Vector2(100, 28)
-	UIUtils.btn_style_mini(test_btn, Color(0.22, 0.15, 0.38))
-	test_btn.pressed.connect(_on_test_generate_equip)
-	add_child(test_btn)
+	# -- 调试面板入口按钮 --
+	var debug_btn := Button.new()
+	debug_btn.name = "DebugPanelBtn"
+	debug_btn.text = "🔧 调试"
+	debug_btn.position = Vector2(8, 314)
+	debug_btn.size = Vector2(80, 28)
+	UIUtils.btn_style_mini(debug_btn, Color(0.22, 0.22, 0.35))
+	debug_btn.pressed.connect(_toggle_debug_panel)
+	add_child(debug_btn)
 
 	add_child(bar)
 
@@ -560,17 +681,17 @@ func _slide_grids() -> void:
 		return
 	var total_span := TILE_COUNT * TILE_W
 	var start_x := (1280.0 - total_span) / 2.0
-	var slot_names := ["PrevGrid2", "PrevGrid1", "CurrentGrid", "NextGrid1", "NextGrid2", "NextGrid3", "NextGrid4"]
+	var slot_names: Array[String] = TILE_SLOT_NAMES
 	for i in range(TILE_COUNT):
 		var tile := area.get_node_or_null(slot_names[i])
 		if tile:
 			tile.position.x = start_x + i * TILE_W + _scroll_offset
 
-	# 主角弹跳：基于基准位置 + 当前弹跳偏移
+	# 主角弹跳：始终锚定在逻辑当前格槽位上
 	var hero: TextureRect = area.get_node_or_null("HeroOnMap") as TextureRect
 	if hero:
 		var tile_y: float = area.size.y - TILE_H - 12
-		var cx: float = start_x + 3 * TILE_W + TILE_W / 2.0 + TILE_SHEAR / 2.0
+		var cx: float = start_x + CURRENT_TILE_SLOT * TILE_W + TILE_W / 2.0 + TILE_SHEAR / 2.0
 		var cy: float = tile_y + TILE_H / 2.0
 		hero.position = Vector2(cx - hero.size.x / 2.0, cy - hero.size.y + 10 + _bounce_offset)
 
@@ -1221,8 +1342,10 @@ func _refresh_grid_display() -> void:
 	if not area:
 		return
 	var idx := player_grid_index
-	var offsets := [-2, -1, 0, 1, 2, 3, 4]
-	var slot_names := ["PrevGrid2", "PrevGrid1", "CurrentGrid", "NextGrid1", "NextGrid2", "NextGrid3", "NextGrid4"]
+	var offsets: Array[int] = []
+	for offset in range(-VISIBLE_BEFORE, VISIBLE_AFTER + 1):
+		offsets.append(offset)
+	var slot_names: Array[String] = TILE_SLOT_NAMES
 
 	for i in range(TILE_COUNT):
 		var grid_idx: int = idx + offsets[i]
@@ -1231,20 +1354,20 @@ func _refresh_grid_display() -> void:
 			continue
 
 		var info := _get_grid_info(grid_idx)
-		var is_current := (i == 3)
+		var is_current := (i == CURRENT_TILE_SLOT)
 		var clr: Color = info["clr"]
 		var fill: Color = clr if is_current else clr.darkened(0.55)
 		var border: Color = Color(1.0, 1.0, 0.2, 0.9) if is_current else Color(0.5, 0.5, 0.6, 0.5)
 		tile.setup(info["icon"], info["name"] + "#" + str(grid_idx), fill, border)
 
 		# 视野外格子半透明
-		var dist := absi(i - 3)
+		var dist := absi(i - CURRENT_TILE_SLOT)
 		tile.modulate.a = 1.0 if dist <= 2 else maxf(0.15, 1.0 - (dist - 2) * 0.28)
 
 	# 主角位置更新
 	var hero: TextureRect = area.get_node_or_null("HeroOnMap") as TextureRect
 	if hero:
-		_position_hero_on_tile(hero, 3)
+		_position_hero_on_tile(hero, CURRENT_TILE_SLOT)
 
 	var pos_lbl: Label = area.get_node("GridPosLabel") as Label
 	if pos_lbl:

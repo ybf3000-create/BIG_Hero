@@ -328,7 +328,7 @@ static func _exec_empty(ctx: Dictionary) -> Dictionary:
 	var lv: int = ctx.get("player_level", 1)
 	var gold: int = int(mini(lv, 100) * randf_range(0.3, 0.8))
 	ctx["player_gold"] = ctx.get("player_gold", 0) + gold
-	return {"event": "empty", "data": {"gold": gold, "message": ""}}
+	return {"event": "empty", "data": {"gold": gold, "message": "+%d 金" % gold}}
 
 
 static func _random_slot() -> String:

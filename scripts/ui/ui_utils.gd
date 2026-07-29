@@ -1,5 +1,7 @@
 class_name UIUtils
 
+const EquipData = preload("res://scripts/equip_data.gd")
+
 const SUIT_COLORS := {
 	"♠": Color(0.75, 0.78, 0.82),
 	"♣": Color(0.75, 0.78, 0.82),
