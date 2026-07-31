@@ -1499,13 +1499,18 @@ func _show_float_text(text: String, clr: Color = Color.WHITE) -> void:
 
 	var lbl: Label = Label.new()
 	lbl.text = text
-	lbl.add_theme_font_size_override("font_size", 22)
+	lbl.add_theme_font_size_override("font_size", 26)
 	lbl.add_theme_color_override("font_color", clr)
 	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-	lbl.add_theme_constant_override("outline_size", 2)
+	lbl.add_theme_constant_override("outline_size", 4)
+	lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.72))
+	lbl.add_theme_constant_override("shadow_offset_x", 2)
+	lbl.add_theme_constant_override("shadow_offset_y", 3)
+	lbl.add_theme_constant_override("shadow_outline_size", 2)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.position = Vector2((1280 - len(text) * 14) / 2.0, 280)
-	lbl.size = Vector2(len(text) * 14, 30)
+	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lbl.position = Vector2(390, 270)
+	lbl.size = Vector2(500, 44)
 	lbl.modulate.a = 0.0
 	layer.add_child(lbl)
 	_float_text_node = lbl
@@ -1513,7 +1518,7 @@ func _show_float_text(text: String, clr: Color = Color.WHITE) -> void:
 	var tw := create_tween()
 	tw.set_parallel(false)
 	tw.tween_property(lbl, "modulate:a", 1.0, 0.2)
-	tw.tween_property(lbl, "position:y", 240, 1.8)
+	tw.tween_property(lbl, "position:y", 225, 1.8)
 	tw.parallel().tween_property(lbl, "modulate:a", 0.0, 1.8)
 	tw.tween_callback(func():
 		if _float_text_node == lbl:

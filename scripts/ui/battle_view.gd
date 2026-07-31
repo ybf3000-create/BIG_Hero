@@ -209,29 +209,35 @@ func _create_unit(data: Dictionary, side: String, pos: Vector2, texture_path: St
 	_text_outline(name_label, Color.WHITE, 2)
 	root.add_child(name_label)
 
-	var hp := ProgressBar.new()
+	var hp_frame := Panel.new()
+	hp_frame.name = "HPFrame"
+	hp_frame.position = Vector2(5, 91)
+	hp_frame.size = Vector2(170, 20)
+	hp_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hp_frame.add_theme_stylebox_override("panel", _box(Color("392f34"), Color("fff9ee"), 2, 1))
+	root.add_child(hp_frame)
+	var max_hp := maxf(float(data.get("max_hp", 1)), 1.0)
+	var current_hp := float(data.get("current_hp", data.get("max_hp", 1)))
+	var hp := ColorRect.new()
 	hp.name = "HP"
-	hp.position = Vector2(6, 92)
-	hp.size = Vector2(168, 18)
-	hp.show_percentage = false
-	hp.max_value = maxf(float(data.get("max_hp", 1)), 1.0)
-	hp.value = float(data.get("current_hp", data.get("max_hp", 1)))
-	hp.add_theme_stylebox_override("background", _box(Color("392f34"), Color("fff9ee"), 2, 0))
-	hp.add_theme_stylebox_override("fill", _box(HP_COLOR if side == "player" else Color("c33a4c"), Color.TRANSPARENT, 0, 0))
+	hp.position = Vector2(8, 94)
+	hp.size = Vector2(164.0 * clampf(current_hp / max_hp, 0.0, 1.0), 14)
+	hp.color = HP_COLOR if side == "player" else Color("c33a4c")
+	hp.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(hp)
 
 	var shield := ColorRect.new()
 	shield.name = "Shield"
-	shield.position = Vector2(9, 95)
-	shield.size = Vector2(0, 12)
+	shield.position = Vector2(8, 94)
+	shield.size = Vector2(0, 14)
 	shield.color = Color(SHIELD_COLOR, 0.34)
 	shield.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(shield)
 	var hp_text := Label.new()
 	hp_text.name = "HPText"
-	hp_text.text = "%d / %d" % [int(hp.value), int(hp.max_value)]
-	hp_text.position = Vector2(6, 92)
-	hp_text.size = Vector2(168, 18)
+	hp_text.text = "%d / %d" % [int(current_hp), int(max_hp)]
+	hp_text.position = Vector2(5, 91)
+	hp_text.size = Vector2(170, 20)
 	hp_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hp_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	hp_text.add_theme_font_size_override("font_size", 9)
@@ -240,7 +246,7 @@ func _create_unit(data: Dictionary, side: String, pos: Vector2, texture_path: St
 
 	var statuses := HBoxContainer.new()
 	statuses.name = "Statuses"
-	statuses.position = Vector2(28, 114)
+	statuses.position = Vector2(28, 120)
 	statuses.size = Vector2(124, 26)
 	statuses.alignment = BoxContainer.ALIGNMENT_CENTER
 	statuses.add_theme_constant_override("separation", 4)
@@ -248,7 +254,7 @@ func _create_unit(data: Dictionary, side: String, pos: Vector2, texture_path: St
 
 	var key := _key(side, int(data.get("id", 0)))
 	_units[key] = root
-	_unit_data[key] = {"max_hp": hp.max_value, "shield": 0.0, "name": name_label.text, "is_boss": bool(data.get("is_boss", false))}
+	_unit_data[key] = {"max_hp": max_hp, "current_hp": current_hp, "shield": 0.0, "name": name_label.text, "is_boss": bool(data.get("is_boss", false))}
 	if bool(data.get("is_boss", false)):
 		_boss_key = key
 
@@ -269,9 +275,8 @@ func _build_boss_hud() -> void:
 	_boss_hp.position = Vector2(360, 43)
 	_boss_hp.size = Vector2(560, 24)
 	_boss_hp.show_percentage = false
-	var unit_hp := (_units[_boss_key] as Control).get_node("HP") as ProgressBar
-	_boss_hp.max_value = unit_hp.max_value
-	_boss_hp.value = unit_hp.value
+	_boss_hp.max_value = float(data.get("max_hp", 1.0))
+	_boss_hp.value = float(data.get("current_hp", _boss_hp.max_value))
 	_boss_hp.add_theme_stylebox_override("background", _box(Color("382d35"), Color("fff8e7"), 2, 0))
 	_boss_hp.add_theme_stylebox_override("fill", _box(SHRINE, Color.TRANSPARENT, 0, 0))
 	add_child(_boss_hp)
@@ -477,14 +482,16 @@ func _play_gain(event: Dictionary, color: Color, prefix: String) -> void:
 
 
 func _update_unit_hp(target: Control, hp_value: float, max_hp: float) -> void:
-	var hp := target.get_node_or_null("HP") as ProgressBar
+	var hp := target.get_node_or_null("HP") as ColorRect
 	if not hp:
 		return
-	hp.max_value = maxf(max_hp, 1.0)
-	create_tween().tween_property(hp, "value", hp_value, 0.18 / _speed)
+	var key := _key_for_unit(target)
+	if not key.is_empty():
+		_unit_data[key]["max_hp"] = maxf(max_hp, 1.0)
+		_unit_data[key]["current_hp"] = hp_value
+	create_tween().tween_property(hp, "size:x", 164.0 * clampf(hp_value / maxf(max_hp, 1.0), 0.0, 1.0), 0.18 / _speed)
 	var text := target.get_node_or_null("HPText") as Label
 	if text:
-		var key := _key_for_unit(target)
 		var shield_value := float(_unit_data.get(key, {}).get("shield", 0.0))
 		text.text = "%d / %d%s" % [int(hp_value), int(max_hp), "　盾 %d" % int(shield_value) if shield_value > 0 else ""]
 
@@ -498,11 +505,10 @@ func _set_unit_shield(target: Control, shield_value: float) -> void:
 	var max_hp := maxf(float(info.get("max_hp", 1.0)), 1.0)
 	var overlay := target.get_node_or_null("Shield") as ColorRect
 	if overlay:
-		overlay.size.x = 162.0 * minf(float(info["shield"]) / max_hp, 1.0)
-	var hp := target.get_node_or_null("HP") as ProgressBar
+		overlay.size.x = 164.0 * minf(float(info["shield"]) / max_hp, 1.0)
 	var text := target.get_node_or_null("HPText") as Label
-	if hp and text:
-		text.text = "%d / %d　盾 %d" % [int(hp.value), int(hp.max_value), int(info["shield"])]
+	if text:
+		text.text = "%d / %d　盾 %d" % [int(info.get("current_hp", 0.0)), int(info.get("max_hp", 1.0)), int(info["shield"])]
 
 
 func _add_status(target: Control, status_name: String, duration: float, kind: String = "status") -> void:
