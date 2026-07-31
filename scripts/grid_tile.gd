@@ -19,14 +19,14 @@ func _ready() -> void:
 	_icon_label = Label.new()
 	_icon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_icon_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_icon_label.add_theme_font_size_override("font_size", 22)  # 缩小 30%（32→22）
+	_icon_label.add_theme_font_size_override("font_size", 21)
 	add_child(_icon_label)
 
 	_name_label = Label.new()
 	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_name_label.add_theme_font_size_override("font_size", 20)
-	_name_label.add_theme_color_override("font_color", Color(0.85, 0.85, 0.9))
+	_name_label.add_theme_font_size_override("font_size", 17)
+	_name_label.add_theme_color_override("font_color", Color("352e38"))
 	add_child(_name_label)
 
 	_resize_labels()
@@ -58,8 +58,10 @@ func _draw() -> void:
 	])
 
 	draw_colored_polygon(points, fill_color)
+	# 和纸格子的浅色顶沿，让相邻地块保持清晰但不过度厚重。
+	draw_line(points[0], points[1], Color(1, 1, 1, 0.58), 2.0, true)
 	var border := border_color
-	border.a = 0.8
+	border.a = 0.92
 	draw_polyline(points, border, BORDER_W, true)
 
 

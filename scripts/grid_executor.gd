@@ -69,10 +69,32 @@ static func _exec_challenge(ctx: Dictionary) -> Dictionary:
 static func _run_combat(battle_kind: String, ctx: Dictionary) -> Dictionary:
 	var encounter: Dictionary = MonsterGenCls.generate_encounter(battle_kind, ctx)
 	var player_state: Dictionary = ctx.get("player_state", {}).duplicate(true)
-	var result: Dictionary = BattleEngineCls.run_battle(player_state, encounter)
+	var result: Dictionary
+	var set_counts: Dictionary = player_state.get("set_counts", {})
+	var talk_chance := 0.0
+	if battle_kind == "battle" and int(set_counts.get("口才", 0)) >= 3:
+		talk_chance = 0.25
+	elif battle_kind == "elite" and int(set_counts.get("口才", 0)) >= 4:
+		talk_chance = 0.05
+	if talk_chance > 0.0 and randf() < talk_chance:
+		var rewards: Dictionary = BattleEngineCls._calc_victory_rewards(encounter, player_state)
+		result = {
+			"outcome": BattleEngineCls.Outcome.VICTORY, "player_hp": int(player_state.get("current_hp", 1)),
+			"player_max_hp": int(player_state.get("max_hp", 1)), "player_alive": true,
+			"damage_total": 0, "elapsed": 0.0, "rounds": 0, "log": ["口才套装说服敌人，直接胜利"],
+			"events": [], "battle_kind": battle_kind, "monster_level": encounter.get("monster_level", 1),
+			"template_id": encounter.get("template_id", ""), "template_name": encounter.get("template_name", ""),
+			"gold_gain": rewards.get("gold_gain", 0), "exp_gain": rewards.get("exp_gain", 0),
+			"drops": rewards.get("drops", []), "boss_cleared": false, "talk_skip": true,
+		}
+	else:
+		result = BattleEngineCls.run_battle(player_state, encounter)
 	result["encounter"] = encounter
 
 	ctx["player_hp"] = int(result.get("player_hp", ctx.get("player_hp", 1)))
+	var luxury_spent := int(result.get("luxury_gold_spent", 0))
+	if luxury_spent > 0:
+		ctx["player_gold"] = maxi(0, int(ctx.get("player_gold", 0)) - luxury_spent)
 
 	var outcome: int = int(result.get("outcome", -1))
 	var is_challenge: bool = battle_kind == "challenge"
@@ -82,6 +104,7 @@ static func _run_combat(battle_kind: String, ctx: Dictionary) -> Dictionary:
 		"battle_result": result,
 		"encounter": encounter,
 		"type": battle_kind,
+		"luxury_gold_spent": luxury_spent,
 	}
 
 	if is_victory:

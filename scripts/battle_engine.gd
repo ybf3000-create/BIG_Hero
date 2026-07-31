@@ -8,7 +8,6 @@ const CHALLENGE_DURATION: float = 60.0
 const MAX_ROUNDS: int = 50
 const SHIELD_DURATION: float = 5.0
 const HOT_TICK_INTERVAL: float = 1.0
-const HOT_DURATION: float = 5.0
 const REPLY_TICK_INTERVAL: float = 5.0
 
 
@@ -88,7 +87,16 @@ static func _build_initial_state(player_state: Dictionary, encounter: Dictionary
 		"battle_damage_mult": float(player_state.get("battle_damage_mult", 1.0)),
 		"passives": player_state.get("passives", []).duplicate(true),
 		"regen_timer": REPLY_TICK_INTERVAL,
+		"set_counts": player_state.get("set_counts", {}).duplicate(true),
+		"battle_gold": int(player_state.get("battle_gold", 0)),
+		"set_action_count": 0,
 	}
+	if _set_count(player, "暗影") >= 3:
+		player["buffs"]["shadow_stealth"] = 5.0
+	if _set_count(player, "奢侈") >= 3 and int(player.get("battle_gold", 0)) >= 1000:
+		player["atk"] = float(player["atk"]) * (1.6 if _set_count(player, "奢侈") >= 4 else 1.3)
+		player["base_atk"] = player["atk"]
+	player["thunder_timer"] = 8.0
 	for slot in player["skill_slots"]:
 		if slot == null:
 			continue
@@ -128,7 +136,9 @@ static func _build_initial_state(player_state: Dictionary, encounter: Dictionary
 		"elapsed": 0.0,
 		"rounds": 0,
 		"log": [],
+		"events": [],
 		"damage_total": 0.0,
+		"player_start_hp": int(player.get("current_hp", 1)),
 		"outcome": -1,
 		"battle_kind": encounter.get("battle_kind", "battle"),
 		"template_id": encounter.get("template_id", ""),
@@ -173,10 +183,11 @@ static func _advance_time(state: Dictionary, delta: float) -> void:
 
 
 static func _tick_actor_timers(state: Dictionary, actor: Dictionary, delta: float) -> void:
-	var cooldowns: Dictionary = actor.get("cooldowns", {})
-	for sid in cooldowns.keys():
-		cooldowns[sid] = maxf(0.0, float(cooldowns[sid]) - delta)
-
+	if _set_count(actor, "雷霆") >= 4:
+		actor["thunder_timer"] = float(actor.get("thunder_timer", 8.0)) - delta
+		if float(actor["thunder_timer"]) <= 0.0:
+			actor["buffs"]["thunder_frenzy"] = 2.0
+			actor["thunder_timer"] = 8.0
 	if float(actor.get("shield_time", 0.0)) > 0.0:
 		actor["shield_time"] = maxf(0.0, float(actor.get("shield_time", 0.0)) - delta)
 		if float(actor.get("shield_time", 0.0)) <= 0.0:
@@ -194,15 +205,26 @@ static func _tick_actor_timers(state: Dictionary, actor: Dictionary, delta: floa
 		if float(controls[key]) <= 0.0:
 			controls.erase(key)
 
+	var dots: Array = actor.get("dots", [])
+	for i in range(dots.size() - 1, -1, -1):
+		var dot: Dictionary = dots[i]
+		dot["tick_timer"] = float(dot.get("tick_timer", 0.0)) - delta
+		while float(dot.get("tick_timer", 0.0)) <= 0.0 and int(dot.get("ticks_remaining", 0)) > 0 and actor.get("alive", false):
+			dot["tick_timer"] = float(dot.get("tick_timer", 0.0)) + float(dot.get("tick_interval", 1.0))
+			_tick_dot(state, actor, dot)
+			dot["ticks_remaining"] = int(dot.get("ticks_remaining", 0)) - 1
+		if int(dot.get("ticks_remaining", 0)) <= 0 or not actor.get("alive", false):
+			dots.remove_at(i)
+
 	var hots: Array = actor.get("hots", [])
 	for i in range(hots.size() - 1, -1, -1):
 		var hot: Dictionary = hots[i]
-		hot["time_left"] = float(hot.get("time_left", 0.0)) - delta
-		hot["tick_timer"] = float(hot.get("tick_timer", HOT_TICK_INTERVAL)) - delta
-		while float(hot.get("tick_timer", 0.0)) <= 0.0 and float(hot.get("time_left", 0.0)) > 0.0 and actor.get("alive", false):
-			hot["tick_timer"] = float(hot.get("tick_timer", 0.0)) + HOT_TICK_INTERVAL
+		hot["tick_timer"] = float(hot.get("tick_timer", 0.0)) - delta
+		while float(hot.get("tick_timer", 0.0)) <= 0.0 and int(hot.get("ticks_remaining", 0)) > 0 and actor.get("alive", false):
+			hot["tick_timer"] = float(hot.get("tick_timer", 0.0)) + float(hot.get("tick_interval", HOT_TICK_INTERVAL))
 			_apply_heal(state, actor, float(actor.get("max_hp", 0.0)) * float(hot.get("heal_pct", 0.0)) / 100.0, "持续治疗")
-		if float(hot.get("time_left", 0.0)) <= 0.0:
+			hot["ticks_remaining"] = int(hot.get("ticks_remaining", 0)) - 1
+		if int(hot.get("ticks_remaining", 0)) <= 0:
 			hots.remove_at(i)
 
 	if _has_passive(actor, "回复") and actor.get("alive", false):
@@ -210,6 +232,11 @@ static func _tick_actor_timers(state: Dictionary, actor: Dictionary, delta: floa
 		while float(actor.get("regen_timer", 0.0)) <= 0.0 and actor.get("alive", false):
 			actor["regen_timer"] = float(actor.get("regen_timer", 0.0)) + REPLY_TICK_INTERVAL
 			_apply_heal(state, actor, float(actor.get("max_hp", 0.0)) * 0.05, "回复")
+	if _set_count(actor, "自然") >= 4 and float(actor.get("shield", 0.0)) > 0.0 and actor.get("alive", false):
+		actor["nature_regen_timer"] = float(actor.get("nature_regen_timer", 1.0)) - delta
+		while float(actor.get("nature_regen_timer", 0.0)) <= 0.0:
+			actor["nature_regen_timer"] = float(actor.get("nature_regen_timer", 0.0)) + 1.0
+			_apply_heal(state, actor, float(actor.get("max_hp", 0.0)) * 0.02, "自然护盾")
 
 
 static func _process_actor_turn(state: Dictionary, actor_key: String) -> void:
@@ -220,15 +247,19 @@ static func _process_actor_turn(state: Dictionary, actor_key: String) -> void:
 		state["log"].append("%s 受硬控，跳过行动" % actor.get("name", "单位"))
 		_reset_after_turn(actor)
 		return
-	_apply_dot_on_action(state, actor)
-	if not actor.get("alive", false):
-		return
+	_tick_action_cooldowns(actor)
 	var action: Dictionary = _choose_action(actor)
 	if action.get("type", "") == "skill":
 		_execute_skill(state, actor, int(action.get("skill_id", 0)))
 	else:
 		_execute_basic_attack(state, actor)
 	_reset_after_turn(actor)
+
+
+static func _tick_action_cooldowns(actor: Dictionary) -> void:
+	var cooldowns: Dictionary = actor.get("cooldowns", {})
+	for sid in cooldowns.keys():
+		cooldowns[sid] = maxf(0.0, float(cooldowns[sid]) - 1.0)
 
 
 static func _resolve_actor(state: Dictionary, actor_key: String) -> Dictionary:
@@ -244,27 +275,6 @@ static func _resolve_actor(state: Dictionary, actor_key: String) -> Dictionary:
 static func _has_hard_control(actor: Dictionary) -> bool:
 	var controls: Dictionary = actor.get("controls", {})
 	return controls.has("freeze") or controls.has("stun")
-
-
-static func _apply_dot_on_action(state: Dictionary, actor: Dictionary) -> void:
-	var dots: Array = actor.get("dots", [])
-	for i in range(dots.size() - 1, -1, -1):
-		var dot: Dictionary = dots[i]
-		if float(dot.get("time_left", 0.0)) <= 0.0:
-			dots.remove_at(i)
-			continue
-		var dmg: float = float(dot.get("damage", 0.0))
-		_apply_final_damage(state, actor, dmg, {
-			"source": dot.get("source_name", "Dot"),
-			"dot": true,
-			"ignore_free_def": false,
-			"ignore_def": false,
-		})
-		dot["time_left"] = float(dot.get("time_left", 0.0)) - float(actor.get("action_cd", BASE_ACTION_CD))
-		if float(dot.get("time_left", 0.0)) <= 0.0:
-			dots.remove_at(i)
-		if not actor.get("alive", false):
-			break
 
 
 static func _choose_action(actor: Dictionary) -> Dictionary:
@@ -308,22 +318,29 @@ static func _execute_basic_attack(state: Dictionary, actor: Dictionary) -> void:
 	var targets: Array = _select_basic_targets(state, actor)
 	if targets.is_empty():
 		return
+	state["events"].append(_cast_event(actor, targets, 0, "普攻", "basic"))
 	_apply_attack_instance(state, actor, targets[0], 100.0, {"label": "普攻", "is_basic": true})
 
 
 static func _execute_skill(state: Dictionary, actor: Dictionary, skill_id: int) -> void:
-	var skill: Dictionary = SkillDataRef.get_skill(skill_id)
+	var skill: Dictionary = SkillDataRef.get_skill(skill_id).duplicate(true)
 	if skill.is_empty():
 		_execute_basic_attack(state, actor)
 		return
+	if skill_id == 12:
+		var max_stacks: int = int(skill.get("bonus", {}).get("max_stacks", 10))
+		var chain_count: int = mini(int(actor.get("endless_strike_count", 0)) + 1, max_stacks)
+		skill["dmg_pct"] = float(skill.get("dmg_pct", 0.0)) + float(chain_count - 1) * float(skill.get("bonus", {}).get("stack_step_pct", 10.0))
+		actor["endless_strike_count"] = chain_count
 
 	var targets: Array = _select_skill_targets(state, actor, skill)
+	state["events"].append(_cast_event(actor, targets, skill_id, str(skill.get("name", "技能")), _skill_visual_type(skill)))
 	if skill.has("shield_pct"):
 		_apply_shield(state, actor, skill)
 	if skill.has("heal_pct") and (int(skill.get("target", -1)) == SkillDataRef.TargetTag.SELF or int(skill.get("target", -1)) == SkillDataRef.TargetTag.SELF_HEAL):
 		_apply_heal_skill(state, actor, skill)
 	if int(skill_id) == 25:
-		_add_hot(actor, float(skill.get("heal_pct", 0.0)))
+		_add_hot(actor, skill)
 	if skill.get("buff_effect", "") != "":
 		_apply_buff(actor, skill)
 	if int(skill_id) == 26:
@@ -346,7 +363,7 @@ static func _execute_skill(state: Dictionary, actor: Dictionary, skill_id: int) 
 				if hp_pct < float(exec_info.get("threshold", 0.0)):
 					_apply_final_damage(state, targets[1], float(actor.get("atk", 0.0)) * float(exec_info.get("mult", 1.0)), {"source": actor.get("name", "单位"), "owner": actor})
 		if skill.has("control") and targets.size() >= 1:
-			_apply_control_to_target(targets[0], skill)
+			_apply_control_to_target(state, targets[0], skill)
 	elif not targets.is_empty():
 		for target in targets:
 			if not target.get("alive", false):
@@ -354,14 +371,14 @@ static func _execute_skill(state: Dictionary, actor: Dictionary, skill_id: int) 
 			if skill.has("dmg_pct"):
 				_apply_attack_instance(state, actor, target, float(skill.get("dmg_pct", 0.0)), {"label": skill.get("name", "技能"), "skill": skill})
 			if skill.has("control"):
-				_apply_control_to_target(target, skill)
+				_apply_control_to_target(state, target, skill)
 
 	if not handled_pierce:
 		for target in targets:
 			if not target.get("alive", false):
 				continue
 			if skill.has("dot_pct"):
-				_apply_dot(target, actor, skill)
+				_apply_dot(state, target, actor, skill)
 			if int(skill_id) == 31:
 				_detonate_dots(state, actor, target, float(skill.get("bonus", {}).get("detonate_dot", 1.5)))
 			if int(skill_id) == 32:
@@ -371,13 +388,26 @@ static func _execute_skill(state: Dictionary, actor: Dictionary, skill_id: int) 
 			if not target.get("alive", false):
 				continue
 			if skill.has("dot_pct"):
-				_apply_dot(target, actor, skill)
+				_apply_dot(state, target, actor, skill)
 			if int(skill_id) == 31:
 				_detonate_dots(state, actor, target, float(skill.get("bonus", {}).get("detonate_dot", 1.5)))
 			if int(skill_id) == 32:
 				_spread_dot(state, target)
 
-	_set_skill_cooldown(actor, skill_id, float(skill.get("cd", 0.0)))
+	_set_skill_cooldown(actor, skill_id, float(skill.get("action_cd", 1.0)))
+	if _set_count(actor, "星辰") >= 3 and randf() < 0.25:
+		actor["cooldowns"][skill_id] = 0.0
+		actor["star_energy"] = int(actor.get("star_energy", 0)) + 1
+		if _set_count(actor, "星辰") >= 4 and int(actor["star_energy"]) >= 5:
+			actor["star_energy"] = 0
+			for enemy in _opponents(state, actor):
+				if enemy.get("alive", false):
+					var star_dealt := _apply_final_damage(state, enemy, float(actor.get("atk", 0.0)) * 4.0, {"source": "星辰坠落", "owner": actor})
+					state["events"].append({"type": "damage", "source": _actor_ref(actor), "target": _actor_ref(enemy), "amount": int(round(star_dealt)), "hp": int(round(float(enemy.get("current_hp", 0)))), "max_hp": int(enemy.get("max_hp", 1)), "shield": int(round(float(enemy.get("shield", 0.0)))), "crit": false, "block": false, "dot": false, "label": "星辰坠落"})
+			for sid in actor.get("cooldowns", {}).keys():
+				actor["cooldowns"][sid] = 0.0
+	if actor.get("buffs", {}).has("shadow_strike"):
+		actor["buffs"].erase("shadow_strike")
 
 
 static func _set_skill_cooldown(actor: Dictionary, skill_id: int, base_cd: float) -> void:
@@ -392,7 +422,70 @@ static func _reset_after_turn(actor: Dictionary) -> void:
 	var next_cd: float = float(actor.get("action_cd", BASE_ACTION_CD))
 	if actor.get("controls", {}).has("slow"):
 		next_cd *= 1.5
+	actor["set_action_count"] = int(actor.get("set_action_count", 0)) + 1
+	if _set_count(actor, "疾风") >= 3:
+		var threshold := 3
+		if int(actor["set_action_count"]) % threshold == 0:
+			next_cd = 0.01
+			if _set_count(actor, "疾风") >= 4:
+				_reset_random_cooldown(actor)
 	actor["time_to_act"] = next_cd
+
+
+static func _reset_random_cooldown(actor: Dictionary) -> void:
+	var active: Array = []
+	for sid in actor.get("cooldowns", {}).keys():
+		if float(actor["cooldowns"][sid]) > 0.0:
+			active.append(sid)
+	if not active.is_empty():
+		actor["cooldowns"][active[randi() % active.size()]] = 0.0
+
+
+static func _set_count(actor: Dictionary, set_name: String) -> int:
+	return int(actor.get("set_counts", {}).get(set_name, 0))
+
+
+static func _apply_set_burn(state: Dictionary, target: Dictionary, actor: Dictionary) -> void:
+	var burns := 0
+	for dot in target.get("dots", []):
+		if str(dot.get("dot_type", "")) == "set_burn":
+			burns += 1
+	if burns >= 3:
+		return
+	var entry: Dictionary = {
+		"source_name": "烈焰套·灼烧", "damage": float(actor.get("atk", 0.0)) * 0.20,
+		"ticks_remaining": 3, "tick_interval": 1.0, "tick_timer": 1.0,
+		"dot_type": "set_burn", "source_id": -100, "source_side": actor.get("side", "enemy"),
+	}
+	target["dots"].append(entry)
+	_tick_dot(state, target, entry)
+	entry["ticks_remaining"] = int(entry["ticks_remaining"]) - 1
+
+
+static func _trigger_chain_lightning(state: Dictionary, actor: Dictionary, primary: Dictionary, max_targets: int) -> void:
+	var chained := 0
+	for enemy in _opponents(state, actor):
+		if enemy == primary or not enemy.get("alive", false):
+			continue
+		var dealt := _apply_final_damage(state, enemy, float(actor.get("atk", 0.0)) * 1.5, {"source": "雷霆套·连锁闪电", "owner": actor})
+		state["events"].append({"type": "damage", "source": _actor_ref(actor), "target": _actor_ref(enemy), "amount": int(round(dealt)), "hp": int(round(float(enemy.get("current_hp", 0)))), "max_hp": int(enemy.get("max_hp", 1)), "shield": int(round(float(enemy.get("shield", 0.0)))), "crit": false, "block": false, "dot": false, "label": "连锁闪电"})
+		chained += 1
+		if chained >= max_targets:
+			break
+
+
+static func _opponents(state: Dictionary, actor: Dictionary) -> Array:
+	if actor.get("side", "") == "player":
+		return state["actors"]["enemies"]
+	return [state["actors"]["player"]]
+
+
+static func _handle_set_kill(state: Dictionary, actor: Dictionary) -> void:
+	if _set_count(actor, "暗影") >= 4:
+		actor["buffs"]["shadow_strike"] = 4.0
+		actor["time_to_act"] = 0.0
+	if _set_count(actor, "自然") >= 3:
+		_apply_heal(state, actor, float(actor.get("max_hp", 1)) * 0.08, "自然套·生机")
 
 
 static func _select_basic_targets(state: Dictionary, actor: Dictionary) -> Array:
@@ -482,6 +575,8 @@ static func _apply_attack_instance(state: Dictionary, actor: Dictionary, target:
 	var skill: Dictionary = meta.get("skill", {})
 	var label: String = str(meta.get("label", "攻击"))
 	var raw_damage: float = float(actor.get("atk", 0.0)) * dmg_pct / 100.0
+	if actor.get("buffs", {}).has("phantom_step"):
+		raw_damage *= 1.30
 	if actor.get("side", "") == "player":
 		raw_damage *= 1.0 + float(actor.get("free_atk_pct", 0.0))
 	raw_damage *= float(actor.get("battle_damage_mult", 1.0))
@@ -495,14 +590,34 @@ static func _apply_attack_instance(state: Dictionary, actor: Dictionary, target:
 		var result: Dictionary = _resolve_hit_crit_block(actor, target)
 		if not result.get("hit", false):
 			state["log"].append("%s 对 %s 的%s MISS" % [actor.get("name", "单位"), target.get("name", "目标"), label])
+			state["events"].append({"type": "miss", "source": _actor_ref(actor), "target": _actor_ref(target), "label": label})
+			if _set_count(target, "幻影") >= 3:
+				target["buffs"]["phantom_next"] = 999.0
+				target["phantom_dodges"] = int(target.get("phantom_dodges", 0)) + 1
+				if _set_count(target, "幻影") >= 4 and int(target["phantom_dodges"]) % 3 == 0:
+					target["buffs"]["phantom_step"] = 3.0
 			continue
 		var damage: float = raw_damage
+		if actor.get("buffs", {}).has("phantom_next"):
+			damage *= 1.5
+			actor["buffs"].erase("phantom_next")
+		if actor.get("buffs", {}).has("shadow_strike"):
+			damage *= 2.5
 		var ignore_def_pct: float = float(skill.get("bonus", {}).get("ignore_def_pct", 0.0))
 		damage = _apply_defense_damage(actor, target, damage, ignore_def_pct)
 		if result.get("crit", false):
 			damage *= float(actor.get("critdmg", 150.0)) / 100.0
 		if result.get("block", false):
-			damage *= 0.5
+			damage *= 0.35 if _set_count(target, "铁壁") >= 3 else 0.5
+		if target.get("controls", {}).has("freeze"):
+			damage *= 1.5
+			target["controls"].erase("freeze")
+		var burn_count := 0
+		for dot in target.get("dots", []):
+			if str(dot.get("dot_type", "")) == "set_burn":
+				burn_count += 1
+		if _set_count(actor, "烈焰") >= 4 and burn_count > 0:
+			damage *= 1.0 + minf(float(burn_count), 4.0) * 0.12
 		if skill.get("bonus", {}).has("execute_threshold"):
 			var th: float = float(skill.get("bonus", {}).get("execute_threshold", 0.0))
 			var mult: float = float(skill.get("bonus", {}).get("execute_mult", 1.0))
@@ -520,20 +635,58 @@ static func _apply_attack_instance(state: Dictionary, actor: Dictionary, target:
 			"ignore_free_def": false,
 		})
 		state["log"].append("%s 对 %s 使用%s 造成 %.0f 伤害" % [actor.get("name", "单位"), target.get("name", "目标"), label, dealt])
+		state["events"].append({
+			"type": "damage", "source": _actor_ref(actor), "target": _actor_ref(target),
+			"amount": int(round(dealt)), "hp": int(round(float(target.get("current_hp", 0.0)))),
+			"max_hp": int(target.get("max_hp", 1)), "shield": int(round(float(target.get("shield", 0.0)))), "crit": bool(result.get("crit", false)),
+			"block": bool(result.get("block", false)), "dot": false, "label": label,
+		})
 		if actor.get("side", "") == "player":
 			state["damage_total"] += maxf(dealt, 0.0)
+		if dealt > 0.0 and _set_count(actor, "烈焰") >= 3 and target.get("alive", false):
+			_apply_set_burn(state, target, actor)
+		if dealt > 0.0 and _set_count(actor, "冰霜") >= 3 and target.get("alive", false):
+			var freeze_chance := 0.075 if target.get("is_boss", false) else 0.15
+			if randf() < freeze_chance:
+				target["controls"]["freeze"] = 1.5
+				state["events"].append({"type": "status", "target": _actor_ref(target), "status": "冻结", "duration": 1.5})
+				if _set_count(actor, "冰霜") >= 4:
+					actor["shield"] = float(actor.get("shield", 0.0)) + float(actor.get("max_hp", 1)) * 0.08
+		if result.get("crit", false) and _set_count(actor, "雷霆") >= 3:
+			_trigger_chain_lightning(state, actor, target, 2)
+		if result.get("block", false) and _set_count(target, "铁壁") >= 4:
+			target["set_block_count"] = int(target.get("set_block_count", 0)) + 1
+			if int(target["set_block_count"]) % 3 == 0:
+				_apply_final_damage(state, actor, float(target.get("current_hp", 1)) * 0.5, {"source": "铁壁反弹", "owner": target})
+				target["shield"] = float(target.get("shield", 0.0)) + float(target.get("max_hp", 1)) * 0.15
+		if dealt > 0.0 and _set_count(target, "龙鳞") >= 3 and randf() < 0.20:
+			_apply_final_damage(state, actor, dealt * 0.30, {"source": "龙鳞反伤", "owner": target})
+		if dealt > 0.0 and _set_count(target, "龙鳞") >= 4:
+			target["dragon_hits"] = int(target.get("dragon_hits", 0)) + 1
+			if int(target["dragon_hits"]) % 5 == 0:
+				target["buffs"]["dragon_guard"] = 4.0
+				for foe in _opponents(state, target):
+					if foe.get("alive", false):
+						_apply_final_damage(state, foe, float(target.get("atk", 0.0)) * 2.0, {"source": "龙威", "owner": target})
+		if not target.get("alive", true):
+			_handle_set_kill(state, actor)
 		if dealt > 0.0 and _has_passive(target, "荆棘") and actor.get("alive", false):
 			_apply_final_damage(state, actor, dealt * 0.15, {"source": target.get("name", "单位") + "(荆棘)"})
 		if dealt > 0.0 and bool(meta.get("is_basic", false)) and _has_passive(actor, "毒素") and target.get("alive", false):
-			_apply_passive_poison(target, actor)
+			_apply_passive_poison(state, target, actor)
 
 
 static func _resolve_hit_crit_block(actor: Dictionary, target: Dictionary) -> Dictionary:
 	var dodge_rate: float = maxf(0.0, float(target.get("dodge", 0.0)) - float(actor.get("hit", 0.0)))
-	var hit_success: bool = true
-	if actor.get("side", "") == "player":
-		hit_success = randf() * 100.0 >= dodge_rate
-	var crit_success: bool = randf() * 100.0 < float(actor.get("crit", 0.0))
+	if target.get("buffs", {}).has("phantom_step"):
+		dodge_rate *= 2.0
+	var hit_success: bool = randf() * 100.0 >= dodge_rate
+	var crit_rate := float(actor.get("crit", 0.0))
+	if actor.get("buffs", {}).has("shadow_stealth"):
+		crit_rate += 30.0
+	if actor.get("buffs", {}).has("thunder_frenzy") or actor.get("buffs", {}).has("shadow_strike"):
+		crit_rate = 100.0
+	var crit_success: bool = randf() * 100.0 < crit_rate
 	var block_success: bool = randf() * 100.0 < float(target.get("block", 0.0))
 	return {"hit": hit_success, "crit": crit_success, "block": block_success}
 
@@ -549,6 +702,8 @@ static func _apply_defense_damage(_actor: Dictionary, target: Dictionary, damage
 		result *= (1.0 - minf(float(target.get("free_def_pct", 0.0)), 0.50))
 	if target.get("buffs", {}).has("tenacity"):
 		result *= 0.6
+	if target.get("buffs", {}).has("dragon_guard"):
+		result *= 0.7
 	return maxf(result, 1.0)
 
 
@@ -594,7 +749,14 @@ static func _apply_heal(state: Dictionary, actor: Dictionary, heal_amount: float
 		actual *= 0.5
 	var before: float = float(actor.get("current_hp", 0.0))
 	actor["current_hp"] = minf(float(actor.get("max_hp", 0.0)), before + actual)
-	state["log"].append("%s %s %.0f" % [actor.get("name", "单位"), label, float(actor.get("current_hp", 0.0)) - before])
+	var healed := float(actor.get("current_hp", 0.0)) - before
+	var overflow := maxf(0.0, actual - healed)
+	if overflow > 0.0 and _set_count(actor, "自然") >= 4:
+		var shield_cap := float(actor.get("max_hp", 1)) * 0.30
+		actor["shield"] = minf(shield_cap, float(actor.get("shield", 0.0)) + overflow)
+		actor["shield_time"] = maxf(float(actor.get("shield_time", 0.0)), SHIELD_DURATION)
+	state["log"].append("%s %s %.0f" % [actor.get("name", "单位"), label, healed])
+	state["events"].append({"type": "heal", "target": _actor_ref(actor), "amount": int(round(healed)), "hp": int(round(float(actor.get("current_hp", 0.0)))), "max_hp": int(actor.get("max_hp", 1)), "label": label})
 
 
 static func _apply_heal_skill(state: Dictionary, actor: Dictionary, skill: Dictionary) -> void:
@@ -621,6 +783,7 @@ static func _apply_shield(state: Dictionary, actor: Dictionary, skill: Dictionar
 	actor["shield"] = float(actor.get("shield", 0.0)) + shield_value
 	actor["shield_time"] = SHIELD_DURATION
 	state["log"].append("%s 获得护盾 %.0f" % [actor.get("name", "单位"), shield_value])
+	state["events"].append({"type": "shield", "target": _actor_ref(actor), "amount": int(round(shield_value)), "shield": int(round(float(actor.get("shield", 0.0)))), "max_hp": int(actor.get("max_hp", 1)), "label": str(skill.get("name", "护盾"))})
 
 
 static func _apply_buff(actor: Dictionary, skill: Dictionary) -> void:
@@ -631,7 +794,7 @@ static func _apply_buff(actor: Dictionary, skill: Dictionary) -> void:
 	actor["buffs"][effect] = dur
 
 
-static func _apply_control_to_target(target: Dictionary, skill: Dictionary) -> void:
+static func _apply_control_to_target(state: Dictionary, target: Dictionary, skill: Dictionary) -> void:
 	if target.get("buffs", {}).has("tenacity"):
 		return
 	var control_type: int = int(skill.get("control", -1))
@@ -651,27 +814,76 @@ static func _apply_control_to_target(target: Dictionary, skill: Dictionary) -> v
 			target["controls"]["slow"] = dur
 		SkillDataRef.ControlType.ANTI_HEAL:
 			target["controls"]["anti_heal"] = dur
+	if control_type != SkillDataRef.ControlType.NONE and dur > 0.0:
+		state["events"].append({"type": "status", "target": _actor_ref(target), "status": SkillDataRef.control_name(control_type), "duration": dur})
 
 
-static func _apply_dot(target: Dictionary, actor: Dictionary, skill: Dictionary) -> void:
+static func _actor_ref(actor: Dictionary) -> Dictionary:
+	return {"side": str(actor.get("side", "enemy")), "id": int(actor.get("id", 0)), "name": str(actor.get("name", "单位"))}
+
+
+static func _cast_event(actor: Dictionary, targets: Array, skill_id: int, label: String, visual: String) -> Dictionary:
+	var refs: Array[Dictionary] = []
+	for target in targets:
+		refs.append(_actor_ref(target as Dictionary))
+	return {"type": "cast", "source": _actor_ref(actor), "targets": refs, "skill_id": skill_id, "label": label, "visual": visual}
+
+
+static func _skill_visual_type(skill: Dictionary) -> String:
+	if skill.has("heal_pct"):
+		return "heal"
+	if skill.has("shield_pct") or not str(skill.get("buff_effect", "")).is_empty():
+		return "buff"
+	if skill.has("dot_pct"):
+		return "dot"
+	if skill.has("control"):
+		return "control"
+	if int(skill.get("target", -1)) in [SkillDataRef.TargetTag.AOE_FRONT, SkillDataRef.TargetTag.AOE_ALL, SkillDataRef.TargetTag.AOE_BACK]:
+		return "aoe"
+	return "projectile"
+
+
+static func _apply_dot(state: Dictionary, target: Dictionary, actor: Dictionary, skill: Dictionary) -> void:
 	var dot_damage: float = float(actor.get("atk", 0.0)) * float(skill.get("dot_pct", 0.0)) / 100.0
 	dot_damage *= float(actor.get("battle_damage_mult", 1.0))
+	var tick_count: int = maxi(1, int(skill.get("dot_tick_count", 1)))
+	var tick_interval: float = maxf(0.01, float(skill.get("dot_tick_interval", 1.0)))
 	var entry: Dictionary = {
 		"source_name": skill.get("name", "Dot"),
 		"damage": dot_damage,
-		"time_left": float(skill.get("dot_dur", 0.0)),
+		"ticks_remaining": tick_count,
+		"tick_interval": tick_interval,
+		"tick_timer": tick_interval,
 		"dot_type": skill.get("dot_type", "dot"),
+		"source_side": actor.get("side", "enemy"),
 	}
 	var dots: Array = target.get("dots", [])
 	if int(skill.get("dot_mode", 0)) == SkillDataRef.DotMode.REFRESH:
 		for dot in dots:
 			if dot.get("source_name", "") == entry["source_name"]:
 				dot["damage"] = dot_damage
-				dot["time_left"] = float(skill.get("dot_dur", 0.0))
+				dot["ticks_remaining"] = tick_count
+				dot["tick_interval"] = tick_interval
+				dot["tick_timer"] = tick_interval
+				dot["source_side"] = actor.get("side", "enemy")
+				_tick_dot(state, target, dot)
+				dot["ticks_remaining"] = int(dot["ticks_remaining"]) - 1
 				return
 	if dots.size() >= 10:
 		dots.pop_front()
 	dots.append(entry)
+	_tick_dot(state, target, entry)
+	entry["ticks_remaining"] = int(entry["ticks_remaining"]) - 1
+
+
+static func _tick_dot(state: Dictionary, target: Dictionary, dot: Dictionary) -> void:
+	var dealt: float = _apply_final_damage(state, target, float(dot.get("damage", 0.0)), {
+		"source": dot.get("source_name", "Dot"), "dot": true,
+		"ignore_free_def": false, "ignore_def": false,
+	})
+	state["events"].append({"type": "damage", "target": _actor_ref(target), "amount": int(round(dealt)), "hp": int(round(float(target.get("current_hp", 0.0)))), "max_hp": int(target.get("max_hp", 1)), "shield": int(round(float(target.get("shield", 0.0)))), "crit": false, "block": false, "dot": true, "label": str(dot.get("source_name", "Dot"))})
+	if str(dot.get("source_side", "enemy")) == "player":
+		state["damage_total"] += maxf(dealt, 0.0)
 
 
 static func _detonate_dots(state: Dictionary, actor: Dictionary, target: Dictionary, mult: float) -> void:
@@ -680,7 +892,7 @@ static func _detonate_dots(state: Dictionary, actor: Dictionary, target: Diction
 		return
 	var total: float = 0.0
 	for dot in dots:
-		total += float(dot.get("damage", 0.0))
+		total += float(dot.get("damage", 0.0)) * float(dot.get("ticks_remaining", 0))
 	var dealt: float = _apply_final_damage(state, target, total * mult, {"source": actor.get("name", "单位"), "owner": actor})
 	if actor.get("side", "") == "player":
 		state["damage_total"] += dealt
@@ -694,11 +906,18 @@ static func _spread_dot(state: Dictionary, source_target: Dictionary) -> void:
 		if enemy == source_target or not enemy.get("alive", false):
 			continue
 		for dot in dots:
+			if enemy["dots"].size() >= 10:
+				enemy["dots"].pop_front()
 			enemy["dots"].append(dot.duplicate(true))
 
 
-static func _add_hot(actor: Dictionary, heal_pct: float) -> void:
-	actor["hots"].append({"heal_pct": heal_pct, "time_left": HOT_DURATION, "tick_timer": HOT_TICK_INTERVAL})
+static func _add_hot(actor: Dictionary, skill: Dictionary) -> void:
+	var bonus: Dictionary = skill.get("bonus", {})
+	var tick_count: int = maxi(1, int(bonus.get("tick_count", 5)))
+	var tick_interval: float = maxf(0.01, float(bonus.get("tick_interval", HOT_TICK_INTERVAL)))
+	# 释放流程已经立即治疗一次，此处只登记余下次数。
+	if tick_count > 1:
+		actor["hots"].append({"heal_pct": float(skill.get("heal_pct", 0.0)), "ticks_remaining": tick_count - 1, "tick_interval": tick_interval, "tick_timer": tick_interval})
 
 
 static func _check_outcome(state: Dictionary) -> int:
@@ -720,12 +939,14 @@ static func _build_result(state: Dictionary, encounter: Dictionary) -> Dictionar
 	var result: Dictionary = {
 		"outcome": outcome,
 		"player_hp": int(round(float(player.get("current_hp", 0.0)))),
+		"player_start_hp": int(state.get("player_start_hp", player.get("max_hp", 1))),
 		"player_max_hp": int(round(float(player.get("max_hp", 0.0)))),
 		"player_alive": bool(player.get("alive", false)),
 		"damage_total": int(round(float(state.get("damage_total", 0.0)))),
 		"elapsed": float(state.get("elapsed", 0.0)),
 		"rounds": int(state.get("rounds", 0)),
 		"log": state.get("log", []).duplicate(true),
+		"events": state.get("events", []).duplicate(true),
 		"battle_kind": encounter.get("battle_kind", "battle"),
 		"monster_level": encounter.get("monster_level", 1),
 		"template_id": encounter.get("template_id", ""),
@@ -737,7 +958,11 @@ static func _build_result(state: Dictionary, encounter: Dictionary) -> Dictionar
 		"force_home": false,
 		"gold_penalty": 0,
 		"boss_cleared": false,
+		"luxury_gold_spent": 0,
 	}
+	if _set_count(player, "奢侈") >= 3:
+		var cost_per_tick := int(player.get("level", 1)) * (100 if _set_count(player, "奢侈") >= 4 else 50)
+		result["luxury_gold_spent"] = mini(int(player.get("battle_gold", 0)), int(floor(float(result["elapsed"]) / 10.0)) * cost_per_tick)
 
 	if encounter.get("battle_kind", "") == "challenge" and outcome == Outcome.CHALLENGE_DONE:
 		var challenge_rewards: Dictionary = _calc_challenge_rewards(int(result["damage_total"]), int(player.get("level", 1)))
@@ -820,17 +1045,28 @@ static func _has_passive(actor: Dictionary, passive_name: String) -> bool:
 	return false
 
 
-static func _apply_passive_poison(target: Dictionary, actor: Dictionary) -> void:
+static func _apply_passive_poison(state: Dictionary, target: Dictionary, actor: Dictionary) -> void:
 	var entry: Dictionary = {
 		"source_name": actor.get("name", "单位") + "·毒素",
 		"damage": float(actor.get("atk", 0.0)) * 0.15,
-		"time_left": 5.0,
+		"ticks_remaining": 5,
+		"tick_interval": 1.0,
+		"tick_timer": 1.0,
 		"dot_type": "poison",
+		"source_side": actor.get("side", "enemy"),
 	}
 	var dots: Array = target.get("dots", [])
 	for dot in dots:
 		if dot.get("source_name", "") == entry["source_name"]:
 			dot["damage"] = entry["damage"]
-			dot["time_left"] = entry["time_left"]
+			dot["ticks_remaining"] = entry["ticks_remaining"]
+			dot["tick_interval"] = entry["tick_interval"]
+			dot["tick_timer"] = entry["tick_timer"]
+			_tick_dot(state, target, dot)
+			dot["ticks_remaining"] = int(dot["ticks_remaining"]) - 1
 			return
+	if dots.size() >= 10:
+		dots.pop_front()
 	dots.append(entry)
+	_tick_dot(state, target, entry)
+	entry["ticks_remaining"] = int(entry["ticks_remaining"]) - 1

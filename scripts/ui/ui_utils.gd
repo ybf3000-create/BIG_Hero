@@ -27,6 +27,16 @@ static func panel_style(node: Panel, clr: Color) -> void:
 	node.add_theme_stylebox_override("panel", sb)
 
 
+static func shrine_panel_style(node: Panel, bg: Color, border: Color, width: int = 1) -> void:
+	var style := StyleBoxFlat.new()
+	style.bg_color = bg
+	style.border_width_left = width; style.border_width_right = width
+	style.border_width_top = width; style.border_width_bottom = width
+	style.border_color = border
+	style.set_corner_radius_all(3)
+	node.add_theme_stylebox_override("panel", style)
+
+
 static func bar_style(node: ProgressBar, clr: Color) -> void:
 	var bg := StyleBoxFlat.new()
 	bg.bg_color = clr.darkened(0.3)
@@ -36,6 +46,18 @@ static func bar_style(node: ProgressBar, clr: Color) -> void:
 	node.add_theme_stylebox_override("background", bg)
 	var fill := StyleBoxFlat.new()
 	fill.bg_color = clr
+	node.add_theme_stylebox_override("fill", fill)
+
+
+static func bar_style_light(node: ProgressBar, fill_color: Color, bg_color: Color, border: Color) -> void:
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = bg_color
+	bg.border_width_left = 1; bg.border_width_right = 1
+	bg.border_width_top = 1; bg.border_width_bottom = 1
+	bg.border_color = border
+	node.add_theme_stylebox_override("background", bg)
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = fill_color
 	node.add_theme_stylebox_override("fill", fill)
 
 
@@ -76,3 +98,24 @@ static func btn_style(btn: Button, clr: Color) -> void:
 	p.bg_color = clr.darkened(0.15)
 	btn.add_theme_stylebox_override("pressed", p)
 	btn.add_theme_color_override("font_color", Color.WHITE)
+
+
+static func shrine_button_style(btn: Button, primary: bool = false) -> void:
+	var base := Color("c94a55") if primary else Color("f4e8e7")
+	var ink := Color.WHITE if primary else Color("352e38")
+	var border := Color("96353e") if primary else Color("b88d89")
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = base
+	normal.border_width_left = 1; normal.border_width_right = 1
+	normal.border_width_top = 1; normal.border_width_bottom = 1
+	normal.border_color = border
+	normal.set_corner_radius_all(5)
+	btn.add_theme_stylebox_override("normal", normal)
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = base.lightened(0.10)
+	btn.add_theme_stylebox_override("hover", hover)
+	var pressed := normal.duplicate() as StyleBoxFlat
+	pressed.bg_color = base.darkened(0.10)
+	btn.add_theme_stylebox_override("pressed", pressed)
+	btn.add_theme_color_override("font_color", ink)
+	btn.add_theme_color_override("font_hover_color", ink)

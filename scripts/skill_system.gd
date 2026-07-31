@@ -8,12 +8,15 @@ signal skills_changed
 var slots: Array = []
 var cooldowns: Dictionary = {}
 var max_slots: int = 2
+var unlocked_skills: Array[int] = [1, 22]
 
 
 func _init():
 	slots.clear()
 	for i in range(6):
 		slots.append(null)
+	slots[0] = { "skill_id": 1, "priority": 2 }
+	slots[1] = { "skill_id": 22, "priority": 2 }
 
 
 func update_max_slots(level: int) -> void:
@@ -50,6 +53,8 @@ func get_slot_priority(slot_idx: int) -> int:
 
 
 func equip_skill(skill_id: int) -> bool:
+	if not is_skill_unlocked(skill_id):
+		return false
 	for i in range(max_slots):
 		var entry = slots[i]
 		if entry and entry["skill_id"] == skill_id:
@@ -61,6 +66,19 @@ func equip_skill(skill_id: int) -> bool:
 			skills_changed.emit()
 			return true
 	return false
+
+
+func is_skill_unlocked(skill_id: int) -> bool:
+	return skill_id in unlocked_skills
+
+
+func unlock_skill(skill_id: int) -> bool:
+	if is_skill_unlocked(skill_id) or SkillDataRef.get_skill(skill_id).is_empty():
+		return false
+	unlocked_skills.append(skill_id)
+	unlocked_skills.sort()
+	skills_changed.emit()
+	return true
 
 
 func unequip_skill(slot_idx: int) -> bool:
@@ -93,12 +111,19 @@ func to_dict() -> Dictionary:
 		"slots": slot_data,
 		"max_slots": max_slots,
 		"cooldowns": cooldowns.duplicate(),
+		"unlocked_skills": unlocked_skills.duplicate(),
 	}
 
 
 func from_dict(data: Dictionary) -> void:
 	slots.clear()
-	for d in data.get("slots", []):
+	var saved_slots: Array = data.get("slots", [])
+	if saved_slots.is_empty():
+		saved_slots = [
+			{ "skill_id": 1, "priority": 2 },
+			{ "skill_id": 22, "priority": 2 },
+		]
+	for d in saved_slots:
 		slots.append(d.duplicate() if d else null)
 	while slots.size() < 6:
 		slots.append(null)
@@ -107,6 +132,19 @@ func from_dict(data: Dictionary) -> void:
 	var cd_data: Dictionary = data.get("cooldowns", {})
 	for k in cd_data:
 		cooldowns[int(k)] = cd_data[k]
+	unlocked_skills.clear()
+	var saved_unlocks: Array = data.get("unlocked_skills", [])
+	if saved_unlocks.is_empty():
+		# 旧存档迁移：保留已装备技能，并补发两个初始技能。
+		saved_unlocks = [1, 22]
+		for entry in slots:
+			if entry and int(entry.get("skill_id", 0)) > 0:
+				saved_unlocks.append(int(entry["skill_id"]))
+	for sid in saved_unlocks:
+		var skill_id := int(sid)
+		if skill_id > 0 and skill_id not in unlocked_skills:
+			unlocked_skills.append(skill_id)
+	unlocked_skills.sort()
 
 
 func select_next_skill() -> int:

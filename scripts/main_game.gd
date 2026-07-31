@@ -71,6 +71,8 @@ const SkillDataRef = preload("res://scripts/skill_data.gd")
 const SkillCls = preload("res://scripts/skill_system.gd")
 const UIUtilsRef = preload("res://scripts/ui/ui_utils.gd")
 const TopBarCls = preload("res://scripts/ui/top_bar.gd")
+const ShrineBackdropCls = preload("res://scripts/ui/shrine_backdrop.gd")
+const BattleViewCls = preload("res://scripts/ui/battle_view.gd")
 
 # 子系统
 var dice: RefCounted
@@ -169,9 +171,16 @@ func _sm():
 func _build_map_area() -> void:
 	var area := Panel.new()
 	area.name = "MapArea"
-	area.position = Vector2(0, 130)
-	area.size = Vector2(1280, 400)
-	UIUtils.panel_style(area, Color(0.06, 0.07, 0.09))
+	area.position = Vector2(0, 104)
+	area.size = Vector2(1280, 528)
+	UIUtils.shrine_panel_style(area, Color("f6d6d6"), Color("b88d89"), 1)
+
+	# 抽象和风背景：未来替换背景图时，保留本节点作为兜底。
+	var backdrop: Control = ShrineBackdropCls.new()
+	backdrop.name = "ShrineBackdrop"
+	backdrop.position = Vector2.ZERO
+	backdrop.size = area.size
+	area.add_child(backdrop)
 
 	# -- 平行四边形地块（下移到靠近底部，不占底部UI） --
 	var total_span := TILE_COUNT * TILE_W
@@ -210,33 +219,40 @@ func _build_map_area() -> void:
 		fallback.position = Vector2(fcx - 32, grid_tile_y - 50)
 		area.add_child(fallback)
 
-	# -- 位置计数 --
+	# -- 左上角地图状态 --
+	var status_panel := Panel.new()
+	status_panel.name = "MapStatusPanel"
+	status_panel.position = Vector2(20, 18)
+	status_panel.size = Vector2(310, 34)
+	UIUtils.shrine_panel_style(status_panel, Color(1.0, 0.976, 0.96, 0.92), Color("b88d89"), 1)
+	area.add_child(status_panel)
+
 	var pos_lbl := Label.new()
 	pos_lbl.name = "GridPosLabel"
-	pos_lbl.text = "位置: 0/" + str(map_total_grids)
-	pos_lbl.add_theme_font_size_override("font_size", 10)
-	pos_lbl.add_theme_color_override("font_color", Color(0.35, 0.35, 0.4))
-	pos_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	pos_lbl.position = Vector2(0, grid_tile_y + TILE_H + 4)
-	pos_lbl.size = Vector2(1280, 14)
-	area.add_child(pos_lbl)
+	pos_lbl.text = "格子 1 / " + str(map_total_grids) + "  ·  Boss 0 / 100"
+	pos_lbl.add_theme_font_size_override("font_size", 13)
+	pos_lbl.add_theme_color_override("font_color", Color("352e38"))
+	pos_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	pos_lbl.position = Vector2(12, 2)
+	pos_lbl.size = Vector2(286, 30)
+	status_panel.add_child(pos_lbl)
 
-	# -- 右上角：自动挂机勾选（勾选框图标白色描边） --
-	var auto_check := CheckBox.new()
+	# -- 右上角：自动挂机 --
+	var auto_check := CheckButton.new()
 	auto_check.name = "AutoPlayCheck"
 	auto_check.text = "自动挂机"
-	auto_check.add_theme_font_size_override("font_size", 15)
-	auto_check.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0))
-	auto_check.add_theme_color_override("font_pressed_color", Color(0.3, 1.0, 0.5))
+	auto_check.add_theme_font_size_override("font_size", 13)
+	auto_check.add_theme_color_override("font_color", Color("352e38"))
+	auto_check.add_theme_color_override("font_pressed_color", Color("527d68"))
 	auto_check.button_pressed = false
-	auto_check.position = Vector2(1115, 6)
+	auto_check.position = Vector2(1120, 18)
+	auto_check.size = Vector2(140, 34)
 
-	# 勾选框图标白色边框
 	var chk_icon := StyleBoxFlat.new()
-	chk_icon.bg_color = Color(0.08, 0.12, 0.20, 0.85)
+	chk_icon.bg_color = Color(1.0, 0.976, 0.96, 0.92)
 	chk_icon.border_width_left = 1; chk_icon.border_width_right = 1
 	chk_icon.border_width_top = 1; chk_icon.border_width_bottom = 1
-	chk_icon.border_color = Color(1.0, 1.0, 1.0, 0.8)  # 半透白边
+	chk_icon.border_color = Color("b88d89")
 	chk_icon.set_corner_radius_all(3)
 	auto_check.add_theme_stylebox_override("normal", chk_icon)
 
@@ -246,11 +262,13 @@ func _build_map_area() -> void:
 
 
 func _load_hero_texture(res_path: String) -> Texture2D:
+	var imported: Texture2D = load(res_path) as Texture2D
+	if imported:
+		return imported
 	var image: Image = Image.load_from_file(res_path)
 	if image != null and not image.is_empty():
 		return ImageTexture.create_from_image(image)
-	var fallback: Resource = load(res_path)
-	return fallback as Texture2D
+	return null
 
 
 ## 调试面板开关
@@ -377,6 +395,7 @@ func _on_test_battle(battle_kind: String) -> void:
 	var edata: Dictionary = result.get("data", {})
 	if edata.has("battle_result"):
 		_apply_battle_result(edata)
+		_show_battle_view(edata)
 	var msg: String = edata.get("message", battle_kind + " 战斗完成")
 	var clr: Color = Color(1.0, 0.85, 0.3)
 	if edata.get("force_home", false):
@@ -414,29 +433,29 @@ func _position_hero_on_tile(hero: TextureRect, tile_index: int, p_area: Control 
 func _build_bottom_bar() -> void:
 	var bar := Panel.new()
 	bar.name = "BottomBar"
-	bar.position = Vector2(0, 532)
-	bar.size = Vector2(1280, 86)
-	UIUtils.panel_style(bar, Color(0.10, 0.10, 0.16))
+	bar.position = Vector2(0, 632)
+	bar.size = Vector2(1280, 88)
+	UIUtils.shrine_panel_style(bar, Color("fff9f5"), Color("b88d89"), 2)
 
 	# 单行布局：4小按钮(w=170) + 1大按钮(w=260) = 940，剩余 340 / 6间隔 = 57
 	const SMALL_W := 170
-	const SMALL_H := 38
+	const SMALL_H := 44
 	const DICE_W := 260
-	const DICE_H := 42
+	const DICE_H := 52
 	const GAP := 57
 
 	var dice_x := GAP + SMALL_W + GAP + SMALL_W + GAP  # = 57+170+57+170+57 = 511
-	var btn_y := (86.0 - SMALL_H) / 2.0
-	var dice_y := (86.0 - DICE_H) / 2.0
+	var btn_y := (88.0 - SMALL_H) / 2.0
+	var dice_y := (88.0 - DICE_H) / 2.0
 
 	# -- 掷骰大按钮（居中） --
 	var dice_btn := Button.new()
 	dice_btn.name = "DiceRollBtn"
-	dice_btn.text = "🎲  掷  骰"
+	dice_btn.text = "🎲  掷骰前进"
 	dice_btn.position = Vector2(dice_x, dice_y)
 	dice_btn.size = Vector2(DICE_W, DICE_H)
-	UIUtils.btn_style(dice_btn, Color(0.15, 0.28, 0.50))
-	dice_btn.add_theme_font_size_override("font_size", 22)
+	UIUtils.shrine_button_style(dice_btn, true)
+	dice_btn.add_theme_font_size_override("font_size", 19)
 	bar.add_child(dice_btn)
 
 	# -- 功能按钮（左侧2个 + 右侧2个） --
@@ -452,7 +471,7 @@ func _build_bottom_bar() -> void:
 		btn.text = b["text"]
 		btn.position = Vector2(b["x"], btn_y)
 		btn.size = Vector2(SMALL_W, SMALL_H)
-		UIUtils.btn_style(btn, Color(0.18, 0.22, 0.34))
+		UIUtils.shrine_button_style(btn, false)
 		btn.add_theme_font_size_override("font_size", 16)
 		bar.add_child(btn)
 
@@ -720,6 +739,13 @@ func _on_move_complete() -> void:
 	var edata: Dictionary = result.get("data", {})
 	if edata.has("battle_result"):
 		_apply_battle_result(edata)
+		top_bar.check_poker_hand()
+		_check_lottery_draw()
+		top_bar.refresh()
+		top_bar.refresh_compact_stats()
+		_auto_save()
+		_show_battle_view(edata)
+		return
 
 	if edata.get("type", "") == "equip":
 		var eqp: Dictionary = edata.get("equip", {})
@@ -784,7 +810,24 @@ func _build_player_battle_state() -> Dictionary:
 		"exp_bonus": ps.get("exp_bonus", 0.0),
 		"skill_slots": skill_system.to_dict().get("slots", []).duplicate(true),
 		"battle_damage_mult": _calc_battle_damage_mult(),
+		"set_counts": _count_equipped_suits(),
+		"battle_gold": player_gold,
 	}
+
+
+func _show_battle_view(edata: Dictionary) -> void:
+	var area := get_node_or_null("MapArea") as Control
+	if not area or area.get_node_or_null("BattleView"):
+		return
+	_stop_auto_timer()
+	var view: Control = BattleViewCls.new()
+	view.name = "BattleView"
+	area.add_child(view)
+	view.closed.connect(func():
+		if auto_play_enabled:
+			_start_auto_timer()
+	)
+	view.setup(edata)
 
 
 func _calc_battle_damage_mult() -> float:
@@ -844,7 +887,19 @@ func _roll_drop_equip(drop: Dictionary) -> Dictionary:
 	else:
 		if drop.has("quality_floor"):
 			options["min_quality"] = int(drop.get("quality_floor", 0))
-	return EquipGenCls.generate(_random_drop_slot(), player_level, options)
+	var eqp: Dictionary = EquipGenCls.generate(_random_drop_slot(), player_level, options)
+	var suits := _count_equipped_suits()
+	if int(suits.get("引力", 0)) >= 4 and not str(eqp.get("suit_name", "")).is_empty():
+		var luck := int(_calc_player_stats().get("luk", 0))
+		if randf() < 0.01 + float(luck) * 0.002:
+			var candidates: Array[String] = []
+			for set_def in EquipGenCls.SET_POOL:
+				var set_name := str(set_def.get("name", ""))
+				if not set_name.is_empty() and set_name != str(eqp.get("suit_name", "")):
+					candidates.append(set_name)
+			if not candidates.is_empty():
+				eqp["extra_suit_name"] = candidates[randi() % candidates.size()]
+	return eqp
 
 
 func _random_drop_slot() -> String:
@@ -1356,8 +1411,8 @@ func _refresh_grid_display() -> void:
 		var info := _get_grid_info(grid_idx)
 		var is_current := (i == CURRENT_TILE_SLOT)
 		var clr: Color = info["clr"]
-		var fill: Color = clr if is_current else clr.darkened(0.55)
-		var border: Color = Color(1.0, 1.0, 0.2, 0.9) if is_current else Color(0.5, 0.5, 0.6, 0.5)
+		var fill: Color = clr.lightened(0.24) if is_current else clr.lightened(0.52)
+		var border: Color = Color("d9a441") if is_current else Color("ab7772")
 		tile.setup(info["icon"], info["name"] + "#" + str(grid_idx), fill, border)
 
 		# 视野外格子半透明
@@ -1369,9 +1424,9 @@ func _refresh_grid_display() -> void:
 	if hero:
 		_position_hero_on_tile(hero, CURRENT_TILE_SLOT)
 
-	var pos_lbl: Label = area.get_node("GridPosLabel") as Label
+	var pos_lbl: Label = area.get_node("MapStatusPanel/GridPosLabel") as Label
 	if pos_lbl:
-		pos_lbl.text = "位置: " + str(idx) + "/" + str(map_total_grids)
+		pos_lbl.text = "格子 " + str(idx + 1) + " / " + str(map_total_grids) + "  ·  Boss " + str(player_boss_index - 1) + " / 100"
 
 
 func _get_grid_info(index: int) -> Dictionary:
@@ -1446,6 +1501,8 @@ func _show_float_text(text: String, clr: Color = Color.WHITE) -> void:
 	lbl.text = text
 	lbl.add_theme_font_size_override("font_size", 22)
 	lbl.add_theme_color_override("font_color", clr)
+	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+	lbl.add_theme_constant_override("outline_size", 2)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.position = Vector2((1280 - len(text) * 14) / 2.0, 280)
 	lbl.size = Vector2(len(text) * 14, 30)
@@ -1474,9 +1531,11 @@ func _count_equipped_suits() -> Dictionary:
 		if not ep.get("equipped", false):
 			continue
 		var sn: String = ep.get("suit_name", "")
-		if sn.is_empty():
-			continue
-		counts[sn] = counts.get(sn, 0) + 1
+		if not sn.is_empty():
+			counts[sn] = counts.get(sn, 0) + 1
+		var extra_sn: String = ep.get("extra_suit_name", "")
+		if not extra_sn.is_empty() and extra_sn != sn:
+			counts[extra_sn] = counts.get(extra_sn, 0) + 1
 	return counts
 
 func _close_all_tooltips() -> void:
@@ -1622,7 +1681,9 @@ func _build_lottery_tab(area: Panel, _main_panel: Panel) -> void:
 
 func _on_bag_pressed() -> void:
 	_show_inventory_panel()
-func _on_skill_pressed()   -> void: print("[主界面] 打开技能")
+func _on_skill_pressed() -> void:
+	_stats_tab = "skill"
+	_show_stats_panel()
 func _on_log_pressed()     -> void: print("[主界面] 打开日志")
 func _on_settings_pressed()-> void:
 	_auto_save()
@@ -1705,9 +1766,10 @@ func _show_reset_confirm() -> void:
 ## 第三部分续 — 背包面板
 ## ============================================================
 func _show_inventory_panel() -> void:
-	# 移除旧面板（如有）
+	# queue_free 要到帧末才生效；先移出场景树，避免刷新时叠出多个同名面板。
 	var old: Node = get_node_or_null("InventoryPanel")
 	if old and is_instance_valid(old):
+		remove_child(old)
 		old.queue_free()
 	_auto_save()
 	_build_inventory_panel()
@@ -1893,6 +1955,7 @@ func _build_inventory_panel() -> void:
 				slot_btn.gui_input.connect(func(ev: InputEvent):
 					if ev is InputEventMouseButton and ev.pressed:
 						if ev.button_index == MOUSE_BUTTON_RIGHT:
+							slot_btn.accept_event()
 							_on_unequip_instance(esn)
 							_show_inventory_panel()
 						else:
@@ -2313,6 +2376,7 @@ func _build_equip_tab(area: Panel, main_panel: Panel) -> void:
 			btn.gui_input.connect(func(ev: InputEvent):
 				if ev is InputEventMouseButton and ev.pressed:
 					if ev.button_index == MOUSE_BUTTON_RIGHT:
+						btn.accept_event()
 						_on_equip_instance(eidx)
 						_show_inventory_panel()
 					else:
@@ -2909,6 +2973,38 @@ func _calc_player_stats() -> Dictionary:
 				"经验加成":   exp_bonus += av
 
 	# 预留：天命卡加成
+	# 套装 2 件效果统一在最终属性入口结算；3/4 件触发效果由战斗引擎处理。
+	var suit_counts := _count_equipped_suits()
+	if int(suit_counts.get("龙鳞", 0)) >= 2:
+		def_equip += int((def_base + def_equip) * 0.15)
+	if int(suit_counts.get("烈焰", 0)) >= 2:
+		atk_equip += int((atk_base + atk_equip) * 0.10)
+	if int(suit_counts.get("冰霜", 0)) >= 2:
+		spd += 10
+	if int(suit_counts.get("雷霆", 0)) >= 2:
+		crit += 8.0
+	if int(suit_counts.get("疾风", 0)) >= 2:
+		spd += 20
+	if int(suit_counts.get("铁壁", 0)) >= 2:
+		block += 8.0
+	if int(suit_counts.get("暗影", 0)) >= 2:
+		critdmg += 25.0
+	if int(suit_counts.get("自然", 0)) >= 2:
+		lifesteal += 3.0
+	if int(suit_counts.get("引力", 0)) >= 2:
+		gold_bonus += 30.0
+	if int(suit_counts.get("引力", 0)) >= 3:
+		luk += 15
+	if int(suit_counts.get("星辰", 0)) >= 2:
+		cd_reduce += 10.0
+	if int(suit_counts.get("幻影", 0)) >= 2:
+		dodge += 8.0
+	if int(suit_counts.get("口才", 0)) >= 2:
+		luk += 10
+	if int(suit_counts.get("奢侈", 0)) >= 2:
+		gold_bonus -= 50.0
+
+	# 预留：天命卡加成
 	var fate: Dictionary = _calc_fate_bonus()
 	# 预留：神祇祝福加成
 	var deity: Dictionary = _calc_deity_bonus()
@@ -2981,7 +3077,7 @@ func _build_skill_tab(panel: Panel) -> void:
 	help_btn.add_theme_font_size_override("font_size", 11)
 	UIUtils.btn_style_mini(help_btn, Color(0.15, 0.22, 0.38))
 	help_btn.pressed.connect(func():
-		_show_stat_tooltip("优先级规则", "点击数字 ①/②/③ 切换优先级\n右键已装备技能可卸下\n\nCD同时归零时：①>②>③\n同级按槽位从左到右释放\n全部CD中→普攻\n\n槽位解锁(角色等级):\nLv.1=2槽  Lv.5=3槽  Lv.15=4槽\nLv.35=5槽  Lv.45=6槽")
+		_show_stat_tooltip("优先级规则", "点击数字 ①/②/③ 切换优先级\n右键已装备技能可卸下\n\n技能按自身行动次数冷却\n同时就绪时：③>②>①\n同级按槽位从左到右释放\n全部冷却中→普攻\n\n槽位解锁(角色等级):\nLv.1=2槽  Lv.5=3槽  Lv.15=4槽\nLv.35=5槽  Lv.45=6槽")
 	)
 	panel.add_child(help_btn)
 
@@ -3056,7 +3152,7 @@ func _build_skill_tab(panel: Panel) -> void:
 			panel.add_child(name_lbl)
 
 			var cd_lbl: Label = Label.new()
-			cd_lbl.text = "CD " + str(sdata.get("cd", 0)) + "s"
+			cd_lbl.text = "间隔 " + SkillDataRef.action_cd_text(sdata)
 			cd_lbl.add_theme_font_size_override("font_size", 11)
 			cd_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
 			cd_lbl.position = Vector2(sx + 52, sy + 32)
@@ -3180,6 +3276,13 @@ func _build_skill_tab(panel: Panel) -> void:
 		if _skill_filter >= 0 and s["school"] != _skill_filter:
 			continue
 		all_skills.append(s)
+	all_skills.sort_custom(func(a: Dictionary, b: Dictionary):
+		var a_unlocked: bool = bool(skill_system.is_skill_unlocked(int(a["id"])))
+		var b_unlocked: bool = bool(skill_system.is_skill_unlocked(int(b["id"])))
+		if a_unlocked != b_unlocked:
+			return a_unlocked
+		return int(a["id"]) < int(b["id"])
+	)
 
 	# ScrollContainer 包裹技能网格
 	var scroll: ScrollContainer = ScrollContainer.new()
@@ -3200,6 +3303,7 @@ func _build_skill_tab(panel: Panel) -> void:
 
 	for si in range(all_skills.size()):
 		var sdata: Dictionary = all_skills[si]
+		var is_unlocked: bool = skill_system.is_skill_unlocked(int(sdata["id"]))
 		var col_i: int = si % pcol
 		var row_i: int = si / pcol
 		var cx: float = 4.0 + col_i * (icon_s + i_gap)
@@ -3216,12 +3320,12 @@ func _build_skill_tab(panel: Panel) -> void:
 
 		var sc: Color = _skill_school_color(sdata.get("school", 0))
 		var p_style: StyleBoxFlat = StyleBoxFlat.new()
-		p_style.bg_color = sc.darkened(0.5) if not equipped else sc.darkened(0.3)
+		p_style.bg_color = (sc.darkened(0.5) if not equipped else sc.darkened(0.3)) if is_unlocked else Color(0.08, 0.08, 0.1)
 		p_style.border_width_left = 1
 		p_style.border_width_right = 1
 		p_style.border_width_top = 1
 		p_style.border_width_bottom = 1
-		p_style.border_color = sc
+		p_style.border_color = sc if is_unlocked else Color(0.28, 0.28, 0.32)
 		p_style.set_corner_radius_all(4)
 		var pool_bg: Panel = Panel.new()
 		pool_bg.position = Vector2(cx, cy)
@@ -3238,12 +3342,17 @@ func _build_skill_tab(panel: Panel) -> void:
 		var pool_name: Label = Label.new()
 		pool_name.text = sdata.get("name", "??")
 		pool_name.add_theme_font_size_override("font_size", 12)
-		pool_name.add_theme_color_override("font_color", Color(1,1,1))
+		pool_name.add_theme_color_override("font_color", Color(1,1,1) if is_unlocked else Color(0.55,0.55,0.58))
 		pool_name.position = Vector2(cx + 34, cy + 6)
 		content.add_child(pool_name)
 
 		var pool_info: Label = Label.new()
-		pool_info.text = ("已装备" if equipped else "CD" + str(sdata.get("cd",0)) + "s") + " · " + SkillDataRef.school_name(sdata.get("school",0))
+		if equipped:
+			pool_info.text = "已装备 · " + SkillDataRef.action_cd_text(sdata)
+		elif is_unlocked:
+			pool_info.text = SkillDataRef.action_cd_text(sdata) + " · 已解锁"
+		else:
+			pool_info.text = "🔒 " + str(sdata.get("price", 0)) + " 金币"
 		pool_info.add_theme_font_size_override("font_size", 10)
 		pool_info.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
 		pool_info.position = Vector2(cx + 34, cy + 24)
@@ -3272,6 +3381,7 @@ func _show_skill_tooltip(skill_id: int, already_equipped: bool = false, equipped
 	var sdata: Dictionary = SkillDataRef.get_skill(skill_id)
 	if sdata.is_empty():
 		return
+	var is_unlocked: bool = skill_system.is_skill_unlocked(skill_id)
 
 	# 清除旧 tooltip
 	var old_tip: Node = get_node_or_null("SkillTooltip")
@@ -3315,7 +3425,8 @@ func _show_skill_tooltip(skill_id: int, already_equipped: bool = false, equipped
 		8: target_str = "后排全体"
 		9: target_str = "贯穿"
 		10: target_str = "自身"
-	school_lbl.text = SkillDataRef.school_name(sdata.get("school", 0)) + "  |  CD " + str(sdata.get("cd", 0)) + "s" + ("  |  " + target_str if not target_str.is_empty() else "")
+		11: target_str = "自身治疗"
+	school_lbl.text = SkillDataRef.school_name(sdata.get("school", 0)) + "  |  间隔 " + SkillDataRef.action_cd_text(sdata) + ("  |  " + target_str if not target_str.is_empty() else "")
 	school_lbl.add_theme_font_size_override("font_size", 12)
 	school_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
 	school_lbl.position = Vector2(16, 34)
@@ -3370,7 +3481,29 @@ func _show_skill_tooltip(skill_id: int, already_equipped: bool = false, equipped
 
 	# 底部操作按钮
 	var btn_y: float = tip.size.y - 38
-	if already_equipped and equipped_slot >= 0:
+	if not is_unlocked:
+		var buy_btn: Button = Button.new()
+		var price: int = int(sdata.get("price", 0))
+		buy_btn.text = "解锁  " + str(price) + " 金币"
+		buy_btn.position = Vector2(16, btn_y)
+		buy_btn.size = Vector2(150, 28)
+		UIUtils.btn_style_mini(buy_btn, Color(0.35, 0.25, 0.08))
+		buy_btn.disabled = player_gold < price
+		var sid_buy: int = skill_id
+		buy_btn.pressed.connect(func():
+			if player_gold < price:
+				_show_float_text("金币不足，需要 " + str(price) + " 金币", Color(1.0, 0.4, 0.3))
+				return
+			player_gold -= price
+			skill_system.unlock_skill(sid_buy)
+			_auto_save()
+			_close_all_tooltips()
+			if is_instance_valid(parent_panel):
+				parent_panel.queue_free()
+			_show_stats_panel()
+		)
+		tip.add_child(buy_btn)
+	elif already_equipped and equipped_slot >= 0:
 		# 已装备 → 卸下按钮
 		var unequip_btn: Button = Button.new()
 		unequip_btn.text = "卸下"
